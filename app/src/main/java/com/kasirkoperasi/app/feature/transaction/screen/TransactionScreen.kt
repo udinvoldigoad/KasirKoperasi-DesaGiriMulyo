@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -179,8 +181,11 @@ fun TransactionScreen(
                         items = filteredProducts,
                         key = { "product-${it.id}" },
                     ) { product ->
+                        val cartQuantity = uiState.cartItems
+                            .find { it.product.id == product.id }?.quantity ?: 0
                         ProductPickCard(
                             product = product,
+                            cartQuantity = cartQuantity,
                             onClick = { onAddProduct(product) },
                         )
                     }
@@ -771,6 +776,7 @@ private fun SearchField(
 @Composable
 private fun ProductPickCard(
     product: Product,
+    cartQuantity: Int,
     onClick: () -> Unit,
 ) {
     Card(
@@ -789,7 +795,23 @@ private fun ProductPickCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProductInitial(name = product.name)
+            BadgedBox(
+                badge = {
+                    if (cartQuantity > 0) {
+                        Badge(
+                            containerColor = DeepGreen,
+                            contentColor = Color.White,
+                        ) {
+                            Text(
+                                text = cartQuantity.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                },
+            ) {
+                ProductInitial(name = product.name)
+            }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
