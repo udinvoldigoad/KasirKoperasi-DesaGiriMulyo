@@ -1,0 +1,266 @@
+package com.kasirkoperasi.app.feature.product.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.kasirkoperasi.app.domain.model.Product
+import com.kasirkoperasi.app.domain.model.ProductCategory
+import com.kasirkoperasi.app.domain.usecase.DeactivateProductUseCase
+import com.kasirkoperasi.app.domain.usecase.GetProductsUseCase
+import com.kasirkoperasi.app.domain.usecase.SaveProductUseCase
+import com.kasirkoperasi.app.domain.usecase.UpdateProductWithStockInUseCase
+import com.kasirkoperasi.app.feature.product.state.ProductUiState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+class ProductViewModel(
+    private val getProductsUseCase: GetProductsUseCase,
+    private val saveProductUseCase: SaveProductUseCase,
+    private val updateProductWithStockInUseCase: UpdateProductWithStockInUseCase,
+    private val deactivateProductUseCase: DeactivateProductUseCase,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow(ProductUiState())
+    val uiState: StateFlow<ProductUiState> = _uiState.asStateFlow()
+
+    init {
+        loadProducts()
+    }
+
+    fun loadProducts() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                getProductsUseCase()
+            }.onSuccess { products ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        products = products,
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = throwable.message ?: "Gagal memuat data barang",
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveProduct(
+        name: String,
+        category: String,
+        barcode: String,
+        unit: String,
+        purchasePrice: String,
+        sellingPrice: String,
+        stockQuantity: String,
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Nama barang wajib diisi") }
+            return
+        }
+
+        if (purchasePrice.hasNegativeSign() || sellingPrice.hasNegativeSign() || stockQuantity.hasNegativeSign()) {
+            _uiState.update { it.copy(errorMessage = "Harga dan stok tidak boleh negatif") }
+            return
+        }
+
+        val normalizedCategory = ProductCategory.normalize(category)
+        val cleanUnit = unit.trim().ifEmpty { "pcs" }
+        val parsedPurchasePrice = purchasePrice.onlyDigits().toLongOrNull() ?: 0L
+        val parsedSellingPrice = sellingPrice.onlyDigits().toLongOrNull() ?: 0L
+        val parsedStockQuantity = stockQuantity.onlyDigits().toIntOrNull() ?: 0
+
+        if (parsedSellingPrice <= 0L) {
+            _uiState.update { it.copy(errorMessage = "Harga jual wajib lebih dari 0") }
+            return
+        }
+
+        if (parsedPurchasePrice > parsedSellingPrice) {
+            _uiState.update { it.copy(errorMessage = "Harga beli tidak boleh lebih besar dari harga jual") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSaving = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            val product = Product(
+                name = cleanName,
+                category = normalizedCategory,
+                barcode = barcode.trim().ifEmpty { null },
+                unit = cleanUnit,
+                purchasePrice = parsedPurchasePrice,
+                sellingPrice = parsedSellingPrice,
+                stockQuantity = parsedStockQuantity,
+            )
+
+            runCatching {
+                saveProductUseCase(product)
+                getProductsUseCase()
+            }.onSuccess { products ->
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        products = products,
+                        successMessage = "Barang berhasil disimpan",
+                    )
+                }
+            }.onFailure {
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        isSaving = false,
+                        errorMessage = "Gagal menyimpan barang. Periksa barcode atau data yang diisi.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateProductWithStockIn(
+        product: Product,
+        name: String,
+        category: String,
+        purchasePrice: String,
+        sellingPrice: String,
+        stockInQuantity: String,
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Nama barang wajib diisi") }
+            return
+        }
+
+        if (purchasePrice.hasNegativeSign() || sellingPrice.hasNegativeSign() || stockInQuantity.hasNegativeSign()) {
+            _uiState.update { it.copy(errorMessage = "Harga dan stok masuk tidak boleh negatif") }
+            return
+        }
+
+        val normalizedCategory = ProductCategory.normalize(category)
+        val parsedPurchasePrice = purchasePrice.onlyDigits().toLongOrNull() ?: 0L
+        val parsedSellingPrice = sellingPrice.onlyDigits().toLongOrNull() ?: 0L
+        val parsedStockInQuantity = stockInQuantity.onlyDigits().toIntOrNull() ?: 0
+
+        if (parsedSellingPrice <= 0L) {
+            _uiState.update { it.copy(errorMessage = "Harga jual wajib lebih dari 0") }
+            return
+        }
+
+        if (parsedPurchasePrice > parsedSellingPrice) {
+            _uiState.update { it.copy(errorMessage = "Harga beli tidak boleh lebih besar dari harga jual") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSaving = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            val updatedProduct = product.copy(
+                name = cleanName,
+                category = normalizedCategory,
+                purchasePrice = parsedPurchasePrice,
+                sellingPrice = parsedSellingPrice,
+            )
+
+            runCatching {
+                updateProductWithStockInUseCase(
+                    product = updatedProduct,
+                    stockInQuantity = parsedStockInQuantity,
+                )
+                getProductsUseCase()
+            }.onSuccess { products ->
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        products = products,
+                        successMessage = "Barang berhasil diperbarui",
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        isSaving = false,
+                        errorMessage = throwable.message ?: "Gagal memperbarui barang",
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteProduct(product: Product) {
+        if (product.id <= 0L) {
+            _uiState.update { it.copy(errorMessage = "Produk tidak valid") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSaving = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                deactivateProductUseCase(product.id)
+                getProductsUseCase()
+            }.onSuccess { products ->
+                _uiState.update {
+                    it.copy(
+                        isSaving = false,
+                        products = products,
+                        successMessage = "Barang berhasil dihapus",
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        isSaving = false,
+                        errorMessage = throwable.message ?: "Gagal menghapus barang",
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearMessage() {
+        _uiState.update {
+            it.copy(
+                errorMessage = null,
+                successMessage = null,
+            )
+        }
+    }
+
+    private fun String.onlyDigits(): String {
+        return filter { it.isDigit() }
+    }
+
+    private fun String.hasNegativeSign(): Boolean {
+        return trim().startsWith("-")
+    }
+}
