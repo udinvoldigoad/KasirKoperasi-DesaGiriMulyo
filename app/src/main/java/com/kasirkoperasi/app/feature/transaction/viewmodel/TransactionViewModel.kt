@@ -155,7 +155,7 @@ class TransactionViewModel(
     fun useExactAmount() {
         _uiState.update {
             it.copy(
-                paidAmountText = it.totalAmount.toString(),
+                paidAmountText = it.totalAmount.toPaymentText(),
                 errorMessage = null,
                 successMessage = null,
             )
@@ -210,6 +210,8 @@ class TransactionViewModel(
                         selectedPaymentMethod = PaymentMethod.Cash,
                         paidAmountText = "",
                         isSaving = false,
+                        completedItems = currentCart,
+                        completedTotalAmount = currentState.totalAmount,
                         successMessage = "Transaksi berhasil disimpan",
                     )
                 }
@@ -228,12 +230,20 @@ class TransactionViewModel(
         _uiState.update {
             it.copy(
                 errorMessage = null,
+                completedItems = emptyList(),
+                completedTotalAmount = 0L,
                 successMessage = null,
             )
         }
     }
 
     private fun Long.toPaymentText(): String {
-        return if (this <= 0L) "" else toString()
+        if (this <= 0L) return ""
+
+        return toString()
+            .reversed()
+            .chunked(3)
+            .joinToString(".")
+            .reversed()
     }
 }

@@ -9,6 +9,8 @@ data class TransactionUiState(
     val selectedPaymentMethod: PaymentMethod = PaymentMethod.Cash,
     val paidAmountText: String = "",
     val isSaving: Boolean = false,
+    val completedItems: List<CartItem> = emptyList(),
+    val completedTotalAmount: Long = 0L,
     val errorMessage: String? = null,
     val successMessage: String? = null,
 ) {
