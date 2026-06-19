@@ -8,4 +8,5 @@ data class ProductUiState(
     val products: List<Product> = emptyList(),
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val imageUriToDelete: String? = null,
 )

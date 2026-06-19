@@ -28,14 +28,45 @@ object ProductImageStore {
         }
         val targetFile = File(directory, "product-${System.currentTimeMillis()}.jpg")
 
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
         context.contentResolver.openInputStream(sourceUri).use { input ->
-            requireNotNull(input) { "Gagal membaca gambar produk" }
-            FileOutputStream(targetFile).use { output ->
-                input.copyTo(output)
-            }
+            BitmapFactory.decodeStream(input, null, bounds)
         }
 
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = bounds.calculateInSampleSize(SAVED_IMAGE_MAX_SIZE, SAVED_IMAGE_MAX_SIZE)
+        }
+        val decodedBitmap = context.contentResolver.openInputStream(sourceUri).use { input ->
+            BitmapFactory.decodeStream(input, null, decodeOptions)
+        } ?: error("Gagal membaca gambar produk")
+
+        val outputBitmap = decodedBitmap.scaleDown(SAVED_IMAGE_MAX_SIZE)
+        FileOutputStream(targetFile).use { output ->
+            outputBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+        }
+
+        if (outputBitmap != decodedBitmap) {
+            outputBitmap.recycle()
+        }
+        decodedBitmap.recycle()
+
         return Uri.fromFile(targetFile).toString()
+    }
+
+    fun deleteImage(imageUri: String?) {
+        if (imageUri.isNullOrBlank()) return
+
+        runCatching {
+            val uri = Uri.parse(imageUri)
+            if (uri.scheme != "file") return
+
+            val file = File(requireNotNull(uri.path))
+            if (file.parentFile?.name == PRODUCT_IMAGE_DIRECTORY && file.exists()) {
+                file.delete()
+            }
+        }
     }
 
     fun loadBitmap(context: Context, imageUri: String, targetSize: Int = DEFAULT_TARGET_SIZE): Bitmap? {
@@ -79,7 +110,19 @@ object ProductImageStore {
         return sampleSize.coerceAtLeast(1)
     }
 
+    private fun Bitmap.scaleDown(maxSize: Int): Bitmap {
+        val largestSide = maxOf(width, height)
+        if (largestSide <= maxSize) return this
+
+        val scale = maxSize.toFloat() / largestSide
+        val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+        val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
+    }
+
     private const val CAMERA_DIRECTORY = "camera"
     private const val PRODUCT_IMAGE_DIRECTORY = "product_images"
     private const val DEFAULT_TARGET_SIZE = 512
+    private const val SAVED_IMAGE_MAX_SIZE = 512
+    private const val JPEG_QUALITY = 75
 }

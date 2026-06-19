@@ -119,6 +119,7 @@ fun ProductScreen(
     ) -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onClearMessage: () -> Unit,
+    onImageDeletionHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
     selectedRoute: String = AppRoute.Product.route,
     onRouteSelected: (String) -> Unit = {},
@@ -129,6 +130,13 @@ fun ProductScreen(
     LaunchedEffect(uiState.successMessage) {
         if (editingProduct != null && uiState.successMessage != null) {
             editingProduct = null
+        }
+    }
+
+    LaunchedEffect(uiState.imageUriToDelete) {
+        uiState.imageUriToDelete?.let { imageUri ->
+            ProductImageStore.deleteImage(imageUri)
+            onImageDeletionHandled()
         }
     }
 

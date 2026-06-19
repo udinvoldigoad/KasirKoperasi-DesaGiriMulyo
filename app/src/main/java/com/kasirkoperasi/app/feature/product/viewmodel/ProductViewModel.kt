@@ -35,6 +35,7 @@ class ProductViewModel(
                     isLoading = true,
                     errorMessage = null,
                     successMessage = null,
+                    imageUriToDelete = null,
                 )
             }
 
@@ -101,6 +102,7 @@ class ProductViewModel(
                     isSaving = true,
                     errorMessage = null,
                     successMessage = null,
+                    imageUriToDelete = null,
                 )
             }
 
@@ -124,6 +126,7 @@ class ProductViewModel(
                         isSaving = false,
                         products = products,
                         successMessage = "Barang berhasil disimpan",
+                        imageUriToDelete = null,
                     )
                 }
             }.onFailure {
@@ -178,6 +181,7 @@ class ProductViewModel(
                     isSaving = true,
                     errorMessage = null,
                     successMessage = null,
+                    imageUriToDelete = null,
                 )
             }
 
@@ -188,6 +192,10 @@ class ProductViewModel(
                 sellingPrice = parsedSellingPrice,
                 imageUri = imageUri.ifBlank { null },
             )
+            val oldImageUri = product.imageUri
+            val newImageUri = updatedProduct.imageUri
+            val imageUriToDelete = oldImageUri
+                ?.takeIf { it.isNotBlank() && it != newImageUri }
 
             runCatching {
                 updateProductWithStockInUseCase(
@@ -201,6 +209,7 @@ class ProductViewModel(
                         isSaving = false,
                         products = products,
                         successMessage = "Barang berhasil diperbarui",
+                        imageUriToDelete = imageUriToDelete,
                     )
                 }
             }.onFailure { throwable ->
@@ -226,6 +235,7 @@ class ProductViewModel(
                     isSaving = true,
                     errorMessage = null,
                     successMessage = null,
+                    imageUriToDelete = null,
                 )
             }
 
@@ -238,6 +248,7 @@ class ProductViewModel(
                         isSaving = false,
                         products = products,
                         successMessage = "Barang berhasil dihapus",
+                        imageUriToDelete = product.imageUri,
                     )
                 }
             }.onFailure { throwable ->
@@ -256,7 +267,14 @@ class ProductViewModel(
             it.copy(
                 errorMessage = null,
                 successMessage = null,
+                imageUriToDelete = null,
             )
+        }
+    }
+
+    fun clearImageDeletionRequest() {
+        _uiState.update {
+            it.copy(imageUriToDelete = null)
         }
     }
 

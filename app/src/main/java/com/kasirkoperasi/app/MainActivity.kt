@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -14,9 +15,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.di.AppContainer
 import com.kasirkoperasi.app.feature.history.screen.TransactionHistoryScreen
@@ -33,6 +36,11 @@ import com.kasirkoperasi.app.feature.transaction.screen.TransactionScreen
 import com.kasirkoperasi.app.feature.transaction.viewmodel.TransactionViewModel
 import com.kasirkoperasi.app.feature.transaction.viewmodel.TransactionViewModelFactory
 import com.kasirkoperasi.app.ui.theme.KasirKoperasiTheme
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy {
@@ -82,7 +90,46 @@ class MainActivity : ComponentActivity() {
             ),
         )
         setContent {
+            val context = LocalContext.current
+            val homeBarcodeScanner = remember(context) {
+                val options = GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(
+                        Barcode.FORMAT_QR_CODE,
+                        Barcode.FORMAT_CODE_128,
+                        Barcode.FORMAT_EAN_13,
+                        Barcode.FORMAT_EAN_8,
+                    )
+                    .enableAutoZoom()
+                    .build()
+
+                GmsBarcodeScanning.getClient(context, options)
+            }
             var selectedRoute by rememberSaveable { mutableStateOf(AppRoute.Home.route) }
+            val startHomeBarcodeScan = {
+                homeBarcodeScanner.startScan()
+                    .addOnSuccessListener { barcode ->
+                        val scannedValue = barcode.rawValue.orEmpty().trim()
+                        if (scannedValue.isNotEmpty()) {
+                            transactionViewModel.updateSearchQuery(scannedValue)
+                            selectedRoute = AppRoute.Transaction.route
+                        } else {
+                            Toast.makeText(context, "Barcode tidak terbaca", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .addOnFailureListener { exception ->
+                        if (exception is ApiException && exception.statusCode == CommonStatusCodes.CANCELED) {
+                            return@addOnFailureListener
+                        }
+
+                        val message = if (exception is ApiException) {
+                            "Scanner tidak tersedia di perangkat ini"
+                        } else {
+                            exception.message ?: "Gagal membuka scanner"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                Unit
+            }
 
             KasirKoperasiTheme {
                 when (selectedRoute) {
@@ -95,6 +142,7 @@ class MainActivity : ComponentActivity() {
                             reportSummary = reportUiState.summary,
                             selectedRoute = selectedRoute,
                             onRouteSelected = { selectedRoute = it },
+                            onScanBarcode = startHomeBarcodeScan,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -108,6 +156,7 @@ class MainActivity : ComponentActivity() {
                             onUpdateProduct = productViewModel::updateProductWithStockIn,
                             onDeleteProduct = productViewModel::deleteProduct,
                             onClearMessage = productViewModel::clearMessage,
+                            onImageDeletionHandled = productViewModel::clearImageDeletionRequest,
                             selectedRoute = selectedRoute,
                             onRouteSelected = { selectedRoute = it },
                             modifier = Modifier.fillMaxSize(),

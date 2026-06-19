@@ -86,6 +86,10 @@ import com.kasirkoperasi.app.ui.theme.FreshMint
 import com.kasirkoperasi.app.ui.theme.LineSoft
 import com.kasirkoperasi.app.ui.theme.MutedText
 import com.kasirkoperasi.app.ui.theme.SoftGray
+import com.google.android.gms.common.api.ApiException
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 @Composable
 fun TransactionScreen(
@@ -109,6 +113,21 @@ fun TransactionScreen(
 ) {
     var activeSheet by remember { mutableStateOf<TransactionSheet?>(null) }
     var isSuccessDialogVisible by remember { mutableStateOf(false) }
+    var scanErrorMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val barcodeScanner = remember(context) {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                Barcode.FORMAT_QR_CODE,
+                Barcode.FORMAT_CODE_128,
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_EAN_8,
+            )
+            .enableAutoZoom()
+            .build()
+
+        GmsBarcodeScanning.getClient(context, options)
+    }
 
     val filteredProducts by remember(products, uiState.searchQuery) {
         derivedStateOf {
@@ -145,6 +164,27 @@ fun TransactionScreen(
             .blur(10.dp)
     } else {
         Modifier.fillMaxSize()
+    }
+    val startBarcodeScan: () -> Unit = {
+        scanErrorMessage = null
+        barcodeScanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val scannedValue = barcode.rawValue.orEmpty().trim()
+                if (scannedValue.isNotEmpty()) {
+                    onSearchChange(scannedValue)
+                    onClearMessage()
+                } else {
+                    scanErrorMessage = "Barcode tidak terbaca"
+                }
+            }
+            .addOnFailureListener { exception ->
+                scanErrorMessage = if (exception is ApiException) {
+                    "Scanner tidak tersedia di perangkat ini"
+                } else {
+                    exception.message ?: "Gagal membuka scanner"
+                }
+            }
+        Unit
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -186,10 +226,20 @@ fun TransactionScreen(
                                     onSearchChange(it)
                                     onClearMessage()
                                 },
+                                onScanClick = startBarcodeScan,
                             )
                         }
 
                         uiState.errorMessage?.let { message ->
+                            item {
+                                MessageCard(
+                                    message = message,
+                                    isError = true,
+                                )
+                            }
+                        }
+
+                        scanErrorMessage?.let { message ->
                             item {
                                 MessageCard(
                                     message = message,
@@ -1013,6 +1063,7 @@ private fun TransactionTopBar() {
 private fun SearchAndScanRow(
     value: String,
     onValueChange: (String) -> Unit,
+    onScanClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1027,7 +1078,7 @@ private fun SearchAndScanRow(
         Surface(
             modifier = Modifier
                 .size(58.dp)
-                .clickable { },
+                .clickable { onScanClick() },
             shape = RoundedCornerShape(14.dp),
             color = Color.White,
             border = BorderStroke(1.dp, LineSoft),
@@ -1038,7 +1089,7 @@ private fun SearchAndScanRow(
             ) {
                 Icon(
                     imageVector = Icons.Outlined.QrCodeScanner,
-                    contentDescription = "Scan barcode belum aktif",
+                    contentDescription = "Scan barcode",
                     modifier = Modifier.size(26.dp),
                     tint = DeepGreen,
                 )
