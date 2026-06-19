@@ -3,12 +3,14 @@ package com.kasirkoperasi.app.feature.report.screen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +28,10 @@ import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,10 +43,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
 import com.kasirkoperasi.app.domain.model.ReportSummary
+import com.kasirkoperasi.app.feature.report.state.ReportExportRange
 import com.kasirkoperasi.app.feature.report.state.ReportUiState
 import com.kasirkoperasi.app.ui.theme.CreamBackground
 import com.kasirkoperasi.app.ui.theme.DangerSoft
@@ -59,6 +70,7 @@ import com.kasirkoperasi.app.ui.theme.LineSoft
 import com.kasirkoperasi.app.ui.theme.MutedText
 import com.kasirkoperasi.app.ui.theme.SoftGray
 import com.kasirkoperasi.app.ui.theme.WarmAccent
+import java.util.Calendar
 
 @Composable
 fun ReportScreen(
@@ -67,64 +79,93 @@ fun ReportScreen(
     onRouteSelected: (String) -> Unit,
     onOpenHistory: () -> Unit,
     onRefresh: () -> Unit,
+    onExportPdf: (ReportExportRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = CreamBackground,
-        topBar = {
-            ReportTopBar(onRefresh = onRefresh)
-        },
-        bottomBar = {
-            KasirBottomBar(
-                selectedRoute = selectedRoute,
-                onRouteSelected = onRouteSelected,
-            )
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 18.dp,
-                end = 16.dp,
-                bottom = 112.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            if (uiState.isLoading) {
+    var isExportRangePanelVisible by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = CreamBackground,
+            topBar = {
+                ReportTopBar(onRefresh = onRefresh)
+            },
+            bottomBar = {
+                KasirBottomBar(
+                    selectedRoute = selectedRoute,
+                    onRouteSelected = onRouteSelected,
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 18.dp,
+                    end = 16.dp,
+                    bottom = 112.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (uiState.isLoading || uiState.isExporting) {
+                    item {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = DeepGreen,
+                            trackColor = SoftGray,
+                        )
+                    }
+                }
+
+                uiState.errorMessage?.let { message ->
+                    item {
+                        ReportMessageCard(message = message)
+                    }
+                }
+
+                uiState.exportErrorMessage?.let { message ->
+                    item {
+                        ReportMessageCard(message = message)
+                    }
+                }
+
                 item {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = DeepGreen,
-                        trackColor = SoftGray,
+                    ReportHeroCard(summary = uiState.summary)
+                }
+
+                item {
+                    ReportMetricGrid(summary = uiState.summary)
+                }
+
+                item {
+                    ExportPdfButton(
+                        enabled = !uiState.isExporting,
+                        isExporting = uiState.isExporting,
+                        onClick = { isExportRangePanelVisible = true },
                     )
                 }
-            }
 
-            uiState.errorMessage?.let { message ->
                 item {
-                    ReportMessageCard(message = message)
+                    HistoryShortcutCard(onClick = onOpenHistory)
+                }
+
+                item {
+                    ReportNoteCard()
                 }
             }
+        }
 
-            item {
-                ReportHeroCard(summary = uiState.summary)
-            }
-
-            item {
-                ReportMetricGrid(summary = uiState.summary)
-            }
-
-            item {
-                HistoryShortcutCard(onClick = onOpenHistory)
-            }
-
-            item {
-                ReportNoteCard()
-            }
+        if (isExportRangePanelVisible) {
+            ExportRangePanel(
+                onDismiss = { isExportRangePanelVisible = false },
+                onRangeSelected = { range ->
+                    isExportRangePanelVisible = false
+                    onExportPdf(range)
+                },
+            )
         }
     }
 }
@@ -314,6 +355,206 @@ private fun ReportMetricGrid(
                 icon = Icons.Outlined.Inventory2,
                 iconBackground = SoftGray,
                 modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExportPdfButton(
+    enabled: Boolean,
+    isExporting: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(54.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = DeepGreen,
+            contentColor = Color.White,
+            disabledContainerColor = SoftGray,
+            disabledContentColor = MutedText,
+        ),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.PictureAsPdf,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = if (isExporting) "Membuat PDF..." else "Export PDF Pembukuan",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun ExportRangePanel(
+    onDismiss: () -> Unit,
+    onRangeSelected: (ReportExportRange) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.56f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ReportPanelHandle(onDismiss = onDismiss)
+
+                Text(
+                    text = "Pilih Periode Export",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    text = "PDF berisi rincian transaksi sesuai periode yang dipilih.",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ReportExportRange.entries.forEach { range ->
+                        ExportRangeOption(
+                            range = range,
+                            onClick = { onRangeSelected(range) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportPanelHandle(
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(onDismiss) {
+                var dragDistance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        dragDistance += dragAmount
+                        if (dragDistance > 56f) {
+                            change.consume()
+                            onDismiss()
+                        }
+                    },
+                    onDragEnd = { dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(6.dp)
+                .background(MutedText, RoundedCornerShape(50)),
+        )
+    }
+}
+
+@Composable
+private fun ExportRangeOption(
+    range: ReportExportRange,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(FreshMint, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.PictureAsPdf,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = range.title,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = range.descriptionForUi(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = LeafGreen,
             )
         }
     }
@@ -516,4 +757,14 @@ private fun ReportSummary.marginPercent(): String {
 
     val percent = (totalProfit * 100) / totalSales
     return "$percent%"
+}
+
+private fun ReportExportRange.descriptionForUi(): String {
+    return when (this) {
+        ReportExportRange.CurrentMonth -> {
+            val daysInMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
+            "$description ($daysInMonth hari bulan ini)"
+        }
+        else -> description
+    }
 }

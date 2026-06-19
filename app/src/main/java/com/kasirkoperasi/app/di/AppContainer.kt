@@ -1,6 +1,7 @@
 package com.kasirkoperasi.app.di
 
 import android.content.Context
+import com.kasirkoperasi.app.core.pdf.TransactionReportPdfExporter
 import com.kasirkoperasi.app.data.local.database.KasirDatabase
 import com.kasirkoperasi.app.data.repository.ProductRepositoryImpl
 import com.kasirkoperasi.app.data.repository.ReportRepositoryImpl
@@ -10,6 +11,7 @@ import com.kasirkoperasi.app.domain.repository.ReportRepository
 import com.kasirkoperasi.app.domain.repository.SalesTransactionRepository
 import com.kasirkoperasi.app.domain.usecase.CompleteSalesTransactionUseCase
 import com.kasirkoperasi.app.domain.usecase.DeactivateProductUseCase
+import com.kasirkoperasi.app.domain.usecase.ExportTransactionReportPdfUseCase
 import com.kasirkoperasi.app.domain.usecase.GetProductsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionItemsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
@@ -19,6 +21,7 @@ import com.kasirkoperasi.app.domain.usecase.UpdateProductWithStockInUseCase
 
 class AppContainer(context: Context) {
     private val database = KasirDatabase.getInstance(context)
+    private val transactionReportPdfExporter = TransactionReportPdfExporter(context.applicationContext)
 
     private val productRepository: ProductRepository = ProductRepositoryImpl(
         productDao = database.productDao(),
@@ -43,6 +46,10 @@ class AppContainer(context: Context) {
     val deactivateProductUseCase = DeactivateProductUseCase(productRepository)
     val completeSalesTransactionUseCase = CompleteSalesTransactionUseCase(salesTransactionRepository)
     val getSalesTransactionItemsUseCase = GetSalesTransactionItemsUseCase(salesTransactionRepository)
+    val exportTransactionReportPdfUseCase = ExportTransactionReportPdfUseCase(
+        getSalesTransactionItemsUseCase = getSalesTransactionItemsUseCase,
+        transactionReportPdfExporter = transactionReportPdfExporter,
+    )
     val getSalesTransactionsUseCase = GetSalesTransactionsUseCase(salesTransactionRepository)
     val getSimpleReportUseCase = GetSimpleReportUseCase(reportRepository)
 }

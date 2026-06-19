@@ -21,10 +21,6 @@ class TransactionHistoryViewModel(
     private val _uiState = MutableStateFlow(TransactionHistoryUiState())
     val uiState: StateFlow<TransactionHistoryUiState> = _uiState.asStateFlow()
 
-    init {
-        loadTransactions()
-    }
-
     fun selectRange(range: TransactionHistoryRange) {
         loadTransactions(range)
     }

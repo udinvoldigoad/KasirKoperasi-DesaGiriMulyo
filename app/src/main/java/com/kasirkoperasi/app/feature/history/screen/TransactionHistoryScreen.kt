@@ -3,6 +3,7 @@ package com.kasirkoperasi.app.feature.history.screen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -551,7 +553,7 @@ private fun TransactionDetailOverlay(
                     .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                PanelHandle()
+                PanelHandle(onDismiss = onDismiss)
                 DetailHeader(onDismiss = onDismiss)
 
                 if (isLoading) {
@@ -596,9 +598,28 @@ private fun TransactionDetailOverlay(
 }
 
 @Composable
-private fun PanelHandle() {
+private fun PanelHandle(
+    onDismiss: () -> Unit,
+) {
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(onDismiss) {
+                var dragDistance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        dragDistance += dragAmount
+                        if (dragDistance > 56f) {
+                            change.consume()
+                            onDismiss()
+                        }
+                    },
+                    onDragEnd = { dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         Box(

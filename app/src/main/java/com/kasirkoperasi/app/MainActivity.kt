@@ -1,6 +1,8 @@
 package com.kasirkoperasi.app
 
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -8,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +57,8 @@ class MainActivity : ComponentActivity() {
     private val reportViewModel: ReportViewModel by viewModels {
         ReportViewModelFactory(
             getSimpleReportUseCase = appContainer.getSimpleReportUseCase,
+            getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
+            exportTransactionReportPdfUseCase = appContainer.exportTransactionReportPdfUseCase,
         )
     }
 
@@ -77,15 +82,14 @@ class MainActivity : ComponentActivity() {
             ),
         )
         setContent {
-            val productUiState by productViewModel.uiState.collectAsState()
-            val transactionUiState by transactionViewModel.uiState.collectAsState()
-            val reportUiState by reportViewModel.uiState.collectAsState()
-            val transactionHistoryUiState by transactionHistoryViewModel.uiState.collectAsState()
             var selectedRoute by rememberSaveable { mutableStateOf(AppRoute.Home.route) }
 
             KasirKoperasiTheme {
                 when (selectedRoute) {
                     AppRoute.Home.route -> {
+                        val productUiState by productViewModel.uiState.collectAsState()
+                        val reportUiState by reportViewModel.uiState.collectAsState()
+
                         HomeScreen(
                             uiState = productUiState,
                             reportSummary = reportUiState.summary,
@@ -96,6 +100,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     AppRoute.Product.route -> {
+                        val productUiState by productViewModel.uiState.collectAsState()
+
                         ProductScreen(
                             uiState = productUiState,
                             onSaveProduct = productViewModel::saveProduct,
@@ -109,6 +115,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     AppRoute.Transaction.route -> {
+                        val productUiState by productViewModel.uiState.collectAsState()
+                        val transactionUiState by transactionViewModel.uiState.collectAsState()
+
                         TransactionScreen(
                             products = productUiState.products,
                             uiState = transactionUiState,
@@ -128,24 +137,39 @@ class MainActivity : ComponentActivity() {
                             onTransactionSaved = {
                                 productViewModel.loadProducts()
                                 reportViewModel.loadTodaySummary()
-                                transactionHistoryViewModel.loadTransactions()
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
                     AppRoute.Report.route -> {
+                        val reportUiState by reportViewModel.uiState.collectAsState()
+
+                        LaunchedEffect(reportUiState.exportedPdfUri) {
+                            reportUiState.exportedPdfUri?.let { uri ->
+                                sharePdf(uri)
+                                reportViewModel.clearExportResult()
+                            }
+                        }
+
                         ReportScreen(
                             uiState = reportUiState,
                             selectedRoute = selectedRoute,
                             onRouteSelected = { selectedRoute = it },
                             onOpenHistory = { selectedRoute = AppRoute.History.route },
                             onRefresh = reportViewModel::loadTodaySummary,
+                            onExportPdf = reportViewModel::exportReportPdf,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
                     AppRoute.History.route -> {
+                        val transactionHistoryUiState by transactionHistoryViewModel.uiState.collectAsState()
+
+                        LaunchedEffect(selectedRoute) {
+                            transactionHistoryViewModel.loadTransactions()
+                        }
+
                         TransactionHistoryScreen(
                             uiState = transactionHistoryUiState,
                             onRangeSelected = transactionHistoryViewModel::selectRange,
@@ -159,5 +183,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun sharePdf(uri: Uri) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Bagikan laporan PDF"))
     }
 }

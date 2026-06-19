@@ -9,10 +9,18 @@ class GetSalesTransactionsUseCase(
     suspend operator fun invoke(
         startDateMillis: Long,
         endDateMillis: Long,
+        limit: Int = DEFAULT_LIMIT,
     ): List<SalesTransaction> {
         return salesTransactionRepository.getTransactionsBetween(
             startDateMillis = startDateMillis,
             endDateMillis = endDateMillis,
+            limit = limit.coerceIn(MIN_LIMIT, MAX_LIMIT),
         )
+    }
+
+    private companion object {
+        const val MIN_LIMIT = 1
+        const val DEFAULT_LIMIT = 100
+        const val MAX_LIMIT = 1_000
     }
 }

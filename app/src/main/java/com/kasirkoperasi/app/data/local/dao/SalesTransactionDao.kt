@@ -20,11 +20,13 @@ interface SalesTransactionDao {
         SELECT * FROM sales_transactions
         WHERE created_at_millis BETWEEN :startDateMillis AND :endDateMillis
         ORDER BY created_at_millis DESC
+        LIMIT :limit
         """,
     )
     suspend fun getTransactionsBetween(
         startDateMillis: Long,
         endDateMillis: Long,
+        limit: Int,
     ): List<SalesTransactionEntity>
 
     @Query(

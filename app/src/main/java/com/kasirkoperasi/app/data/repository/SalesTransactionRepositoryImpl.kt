@@ -135,10 +135,12 @@ class SalesTransactionRepositoryImpl(
     override suspend fun getTransactionsBetween(
         startDateMillis: Long,
         endDateMillis: Long,
+        limit: Int,
     ): List<SalesTransaction> {
         return salesTransactionDao.getTransactionsBetween(
             startDateMillis = startDateMillis,
             endDateMillis = endDateMillis,
+            limit = limit,
         ).map { it.toDomain() }
     }
 
