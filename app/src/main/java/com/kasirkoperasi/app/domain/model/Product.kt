@@ -9,5 +9,6 @@ data class Product(
     val purchasePrice: Long = 0L,
     val sellingPrice: Long = 0L,
     val stockQuantity: Int = 0,
+    val imageUri: String? = null,
     val isActive: Boolean = true,
 )

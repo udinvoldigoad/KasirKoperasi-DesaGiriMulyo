@@ -28,6 +28,8 @@ data class ProductEntity(
     val sellingPrice: Long = 0L,
     @ColumnInfo(name = "stock_quantity")
     val stockQuantity: Int = 0,
+    @ColumnInfo(name = "image_uri")
+    val imageUri: String? = null,
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
     @ColumnInfo(name = "created_at_millis")

@@ -12,6 +12,7 @@ fun ProductEntity.toDomain(): Product = Product(
     purchasePrice = purchasePrice,
     sellingPrice = sellingPrice,
     stockQuantity = stockQuantity,
+    imageUri = imageUri,
     isActive = isActive,
 )
 
@@ -24,5 +25,6 @@ fun Product.toEntity(): ProductEntity = ProductEntity(
     purchasePrice = purchasePrice,
     sellingPrice = sellingPrice,
     stockQuantity = stockQuantity,
+    imageUri = imageUri,
     isActive = isActive,
 )

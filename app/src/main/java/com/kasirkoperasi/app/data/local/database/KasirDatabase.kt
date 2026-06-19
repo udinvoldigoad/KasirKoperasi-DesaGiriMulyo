@@ -22,7 +22,7 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
         SalesTransactionEntity::class,
         SalesTransactionItemEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class KasirDatabase : RoomDatabase() {
@@ -45,7 +45,13 @@ abstract class KasirDatabase : RoomDatabase() {
                     KasirDatabase::class.java,
                     DatabaseConfig.DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                    )
                     .build()
                     .also { instance = it }
             }
@@ -151,6 +157,12 @@ abstract class KasirDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE sales_transactions ADD COLUMN debt_amount INTEGER NOT NULL DEFAULT 0",
                 )
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE products ADD COLUMN image_uri TEXT")
             }
         }
     }

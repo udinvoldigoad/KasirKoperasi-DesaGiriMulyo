@@ -66,6 +66,7 @@ class ProductViewModel(
         purchasePrice: String,
         sellingPrice: String,
         stockQuantity: String,
+        imageUri: String,
     ) {
         val cleanName = name.trim()
         if (cleanName.isEmpty()) {
@@ -111,6 +112,7 @@ class ProductViewModel(
                 purchasePrice = parsedPurchasePrice,
                 sellingPrice = parsedSellingPrice,
                 stockQuantity = parsedStockQuantity,
+                imageUri = imageUri.ifBlank { null },
             )
 
             runCatching {
@@ -142,6 +144,7 @@ class ProductViewModel(
         purchasePrice: String,
         sellingPrice: String,
         stockInQuantity: String,
+        imageUri: String,
     ) {
         val cleanName = name.trim()
         if (cleanName.isEmpty()) {
@@ -183,6 +186,7 @@ class ProductViewModel(
                 category = normalizedCategory,
                 purchasePrice = parsedPurchasePrice,
                 sellingPrice = parsedSellingPrice,
+                imageUri = imageUri.ifBlank { null },
             )
 
             runCatching {

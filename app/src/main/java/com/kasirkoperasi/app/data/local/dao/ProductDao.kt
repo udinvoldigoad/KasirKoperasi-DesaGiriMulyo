@@ -28,6 +28,7 @@ interface ProductDao {
             purchase_price = :purchasePrice,
             selling_price = :sellingPrice,
             stock_quantity = :stockQuantity,
+            image_uri = :imageUri,
             updated_at_millis = :updatedAtMillis
         WHERE id = :productId
         """,
@@ -39,6 +40,7 @@ interface ProductDao {
         purchasePrice: Long,
         sellingPrice: Long,
         stockQuantity: Int,
+        imageUri: String?,
         updatedAtMillis: Long = System.currentTimeMillis(),
     )
 

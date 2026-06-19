@@ -1,9 +1,15 @@
 package com.kasirkoperasi.app.feature.product.screen
 
+import android.graphics.Bitmap
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +26,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,12 +35,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -45,15 +53,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,13 +68,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
@@ -80,6 +93,7 @@ import com.kasirkoperasi.app.ui.theme.FreshMint
 import com.kasirkoperasi.app.ui.theme.LineSoft
 import com.kasirkoperasi.app.ui.theme.MutedText
 import com.kasirkoperasi.app.ui.theme.SoftGray
+import kotlinx.coroutines.delay
 
 @Composable
 fun ProductScreen(
@@ -92,6 +106,7 @@ fun ProductScreen(
         purchasePrice: String,
         sellingPrice: String,
         stockQuantity: String,
+        imageUri: String,
     ) -> Unit,
     onUpdateProduct: (
         product: Product,
@@ -100,6 +115,7 @@ fun ProductScreen(
         purchasePrice: String,
         sellingPrice: String,
         stockInQuantity: String,
+        imageUri: String,
     ) -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onClearMessage: () -> Unit,
@@ -177,112 +193,126 @@ private fun ProductListScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("Semua") }
 
-    val filteredProducts = uiState.products.filter { product ->
-        val matchesSearch = product.name.contains(searchQuery, ignoreCase = true) ||
-            product.barcode.orEmpty().contains(searchQuery, ignoreCase = true)
-        val matchesCategory = selectedCategory == ProductCategory.ALL ||
-            ProductCategory.normalize(product.category) == selectedCategory
+    val filteredProducts by remember(uiState.products, searchQuery, selectedCategory) {
+        derivedStateOf {
+            uiState.products.filter { product ->
+                val matchesSearch = product.name.contains(searchQuery, ignoreCase = true) ||
+                    product.barcode.orEmpty().contains(searchQuery, ignoreCase = true)
+                val matchesCategory = selectedCategory == ProductCategory.ALL ||
+                    ProductCategory.normalize(product.category) == selectedCategory
 
-        matchesSearch && matchesCategory
+                matchesSearch && matchesCategory
+            }
+        }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = CreamBackground,
-        topBar = {
-            ProductTopBar(
-                title = "Barang",
-                leftContent = { KoperasiLogo() },
-                rightContent = null,
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddClick,
-                containerColor = DeepGreen,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp),
+    LaunchedEffect(uiState.successMessage) {
+        if (uiState.successMessage != null) {
+            delay(2200)
+            onClearMessage()
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = CreamBackground,
+            topBar = {
+                ProductTopBar(
+                    title = "Barang",
+                    leftContent = { KoperasiLogo() },
+                    rightContent = null,
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = onAddClick,
+                    containerColor = DeepGreen,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        text = "+",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            },
+            bottomBar = {
+                KasirBottomBar(
+                    selectedRoute = selectedRoute,
+                    onRouteSelected = onRouteSelected,
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = 112.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "+",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                item {
+                    SearchAndFilterRow(
+                        searchQuery = searchQuery,
+                        onSearchChange = {
+                            searchQuery = it
+                            onClearMessage()
+                        },
+                    )
+                }
+
+                item {
+                    CategoryChips(
+                        selectedCategory = selectedCategory,
+                        onCategorySelected = { selectedCategory = it },
+                    )
+                }
+
+                uiState.errorMessage?.let { message ->
+                    item {
+                        MessageCard(
+                            message = message,
+                            isError = true,
+                        )
+                    }
+                }
+
+                if (uiState.isLoading) {
+                    item {
+                        LoadingCard()
+                    }
+                } else if (filteredProducts.isEmpty()) {
+                    item {
+                        EmptyProductCard()
+                    }
+                }
+
+                items(
+                    items = filteredProducts,
+                    key = { it.id },
+                ) { product ->
+                    ProductItemCard(
+                        product = product,
+                        onClick = { onProductClick(product) },
+                    )
+                }
             }
-        },
-        bottomBar = {
-            KasirBottomBar(
-                selectedRoute = selectedRoute,
-                onRouteSelected = onRouteSelected,
+        }
+
+        uiState.successMessage?.let { message ->
+            FloatingSuccessMessage(
+                message = message,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 68.dp, start = 16.dp, end = 16.dp),
             )
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 16.dp,
-                end = 16.dp,
-                bottom = 112.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                SearchAndFilterRow(
-                    searchQuery = searchQuery,
-                    onSearchChange = {
-                        searchQuery = it
-                        onClearMessage()
-                    },
-                )
-            }
-
-            item {
-                CategoryChips(
-                    selectedCategory = selectedCategory,
-                    onCategorySelected = { selectedCategory = it },
-                )
-            }
-
-            uiState.errorMessage?.let { message ->
-                item {
-                    MessageCard(
-                        message = message,
-                        isError = true,
-                    )
-                }
-            }
-
-            uiState.successMessage?.let { message ->
-                item {
-                    MessageCard(
-                        message = message,
-                        isError = false,
-                    )
-                }
-            }
-
-            if (uiState.isLoading) {
-                item {
-                    LoadingCard()
-                }
-            } else if (filteredProducts.isEmpty()) {
-                item {
-                    EmptyProductCard()
-                }
-            }
-
-            items(
-                items = filteredProducts,
-                key = { it.id },
-            ) { product ->
-                ProductItemCard(
-                    product = product,
-                    onClick = { onProductClick(product) },
-                )
-            }
         }
     }
 }
@@ -299,6 +329,7 @@ private fun ProductFormScreen(
         purchasePrice: String,
         sellingPrice: String,
         stockQuantity: String,
+        imageUri: String,
     ) -> Unit,
     onClearMessage: () -> Unit,
     onSaved: () -> Unit,
@@ -311,6 +342,11 @@ private fun ProductFormScreen(
     var purchasePrice by rememberSaveable { mutableStateOf("") }
     var sellingPrice by rememberSaveable { mutableStateOf("") }
     var stockQuantity by rememberSaveable { mutableStateOf("") }
+    var imageUri by rememberSaveable { mutableStateOf("") }
+    var isImageSourcePanelVisible by remember { mutableStateOf(false) }
+    val imagePickerActions = rememberProductImagePicker(
+        onImageSaved = { imageUri = it },
+    )
 
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
@@ -321,78 +357,84 @@ private fun ProductFormScreen(
             purchasePrice = ""
             sellingPrice = ""
             stockQuantity = ""
+            imageUri = ""
             onSaved()
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = CreamBackground,
-        topBar = {
-            ProductTopBar(
-                title = "Tambah Produk Baru",
-                leftContent = {
-                    BackLineIcon()
-                },
-                rightContent = null,
-                onLeftClick = onBackClick,
-            )
-        },
-        bottomBar = {
-            Surface(
-                color = Color.White,
-                shadowElevation = 12.dp,
-                shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
-            ) {
-                Button(
-                    onClick = {
-                        onSaveProduct(
-                            name,
-                            category,
-                            barcode,
-                            unit,
-                            purchasePrice,
-                            sellingPrice,
-                            stockQuantity,
-                        )
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = CreamBackground,
+            topBar = {
+                ProductTopBar(
+                    title = "Tambah Produk Baru",
+                    leftContent = {
+                        BackLineIcon()
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(18.dp)
-                        .height(58.dp),
-                    enabled = !uiState.isSaving,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = DeepGreen,
-                        contentColor = Color.White,
-                    ),
-                    shape = RoundedCornerShape(16.dp),
+                    rightContent = null,
+                    onLeftClick = onBackClick,
+                )
+            },
+            bottomBar = {
+                Surface(
+                    color = Color.White,
+                    shadowElevation = 12.dp,
+                    shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
                 ) {
-                    Text(
-                        text = if (uiState.isSaving) "Menyimpan..." else "Simpan Produk",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                    Button(
+                        onClick = {
+                            onSaveProduct(
+                                name,
+                                category,
+                                barcode,
+                                unit,
+                                purchasePrice,
+                                sellingPrice,
+                                stockQuantity,
+                                imageUri,
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(18.dp)
+                            .height(58.dp),
+                        enabled = !uiState.isSaving,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DeepGreen,
+                            contentColor = Color.White,
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Text(
+                            text = if (uiState.isSaving) "Menyimpan..." else "Simpan Produk",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(
+                    start = 18.dp,
+                    top = 28.dp,
+                    end = 18.dp,
+                    bottom = 104.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    ProductImagePlaceholder(
+                        imageUri = imageUri,
+                        onClick = { isImageSourcePanelVisible = true },
                     )
                 }
-            }
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(
-                start = 18.dp,
-                top = 28.dp,
-                end = 18.dp,
-                bottom = 104.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                ProductImagePlaceholder()
-            }
 
             uiState.errorMessage?.let { message ->
                 item {
@@ -486,6 +528,21 @@ private fun ProductFormScreen(
                 )
             }
         }
+        }
+
+        if (isImageSourcePanelVisible) {
+            ProductImageSourcePanel(
+                onDismiss = { isImageSourcePanelVisible = false },
+                onTakePhoto = {
+                    isImageSourcePanelVisible = false
+                    imagePickerActions.openCamera()
+                },
+                onPickFromGallery = {
+                    isImageSourcePanelVisible = false
+                    imagePickerActions.openGallery()
+                },
+            )
+        }
     }
 }
 
@@ -503,11 +560,11 @@ private fun ProductEditSheet(
         purchasePrice: String,
         sellingPrice: String,
         stockInQuantity: String,
+        imageUri: String,
     ) -> Unit,
     onDelete: (Product) -> Unit,
     onClearMessage: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var name by rememberSaveable(product.id) { mutableStateOf(product.name) }
     var category by rememberSaveable(product.id) { mutableStateOf(ProductCategory.normalize(product.category)) }
     var purchasePrice by rememberSaveable(product.id) {
@@ -517,199 +574,247 @@ private fun ProductEditSheet(
         mutableStateOf(product.sellingPrice.takeIf { it > 0L }?.toString().orEmpty())
     }
     var stockInQuantity by rememberSaveable(product.id) { mutableStateOf("") }
+    var imageUri by rememberSaveable(product.id) { mutableStateOf(product.imageUri.orEmpty()) }
     var showDeleteConfirm by rememberSaveable(product.id) { mutableStateOf(false) }
+    var isImageSourcePanelVisible by remember { mutableStateOf(false) }
+    val imagePickerActions = rememberProductImagePicker(
+        onImageSaved = { imageUri = it },
+    )
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CreamBackground,
-        dragHandle = null,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
     ) {
-        LazyColumn(
-            contentPadding = PaddingValues(
-                start = 18.dp,
-                top = 18.dp,
-                end = 18.dp,
-                bottom = 28.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
         ) {
-            item {
-                Text(
-                    text = "Edit Barang",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = DeepGreen,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
-            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ProductPanelHandle(onDismiss = onDismiss)
 
-            item {
-                ProductImagePlaceholder()
-            }
-
-            errorMessage?.let { message ->
-                item {
-                    MessageCard(
-                        message = message,
-                        isError = true,
-                    )
-                }
-            }
-
-            item {
-                LabeledKasirTextField(
-                    title = "Nama Produk",
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        onClearMessage()
-                    },
-                    label = "Nama Produk*",
-                    leading = { BagLineIcon() },
-                )
-            }
-
-            item {
-                ProductCategorySelector(
-                    selectedCategory = category,
-                    onCategorySelected = {
-                        category = it
-                        onClearMessage()
-                    },
-                )
-            }
-
-            item {
-                LabeledKasirTextField(
-                    title = "Harga Beli",
-                    value = purchasePrice,
-                    onValueChange = {
-                        purchasePrice = it.onlyDigits()
-                        onClearMessage()
-                    },
-                    label = "Harga Beli",
-                    leading = { MoneyLineIcon() },
-                    keyboardType = KeyboardType.Number,
-                )
-            }
-
-            item {
-                LabeledKasirTextField(
-                    title = "Harga Jual",
-                    value = sellingPrice,
-                    onValueChange = {
-                        sellingPrice = it.onlyDigits()
-                        onClearMessage()
-                    },
-                    label = "Harga Jual*",
-                    leading = { MoneyLineIcon() },
-                    keyboardType = KeyboardType.Number,
-                )
-            }
-
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, LineSoft),
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Row(
+                    item {
+                        Text(
+                            text = "Edit Barang",
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                            color = DeepGreen,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
+                    item {
+                        ProductImagePlaceholder(
+                            imageUri = imageUri,
+                            onClick = { isImageSourcePanelVisible = true },
+                        )
+                    }
+
+                    errorMessage?.let { message ->
+                        item {
+                            MessageCard(
+                                message = message,
+                                isError = true,
+                            )
+                        }
+                    }
+
+                    item {
+                        LabeledKasirTextField(
+                            title = "Nama Produk",
+                            value = name,
+                            onValueChange = {
+                                name = it
+                                onClearMessage()
+                            },
+                            label = "Nama Produk*",
+                            leading = { BagLineIcon() },
+                        )
+                    }
+
+                    item {
+                        ProductCategorySelector(
+                            selectedCategory = category,
+                            onCategorySelected = {
+                                category = it
+                                onClearMessage()
+                            },
+                        )
+                    }
+
+                    item {
+                        LabeledKasirTextField(
+                            title = "Harga Beli",
+                            value = purchasePrice,
+                            onValueChange = {
+                                purchasePrice = it.onlyDigits()
+                                onClearMessage()
+                            },
+                            label = "Harga Beli",
+                            leading = { MoneyLineIcon() },
+                            keyboardType = KeyboardType.Number,
+                        )
+                    }
+
+                    item {
+                        LabeledKasirTextField(
+                            title = "Harga Jual",
+                            value = sellingPrice,
+                            onValueChange = {
+                                sellingPrice = it.onlyDigits()
+                                onClearMessage()
+                            },
+                            label = "Harga Jual*",
+                            leading = { MoneyLineIcon() },
+                            keyboardType = KeyboardType.Number,
+                        )
+                    }
+
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, LineSoft),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "Stok Saat Ini",
+                                        color = MutedText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = "${product.stockQuantity} ${product.unit}",
+                                        color = DeepGreen,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+
+                                KasirTextField(
+                                    value = stockInQuantity,
+                                    onValueChange = {
+                                        stockInQuantity = it.onlyDigits()
+                                        onClearMessage()
+                                    },
+                                    label = "Stok Masuk",
+                                    leading = { BoxLineIcon() },
+                                    keyboardType = KeyboardType.Number,
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                onSave(
+                                    product,
+                                    name,
+                                    category,
+                                    purchasePrice,
+                                    sellingPrice,
+                                    stockInQuantity,
+                                    imageUri,
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            enabled = !isSaving,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = DeepGreen,
+                                contentColor = Color.White,
+                            ),
+                            shape = RoundedCornerShape(16.dp),
                         ) {
                             Text(
-                                text = "Stok Saat Ini",
-                                color = MutedText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "${product.stockQuantity} ${product.unit}",
-                                color = DeepGreen,
+                                text = if (isSaving) "Menyimpan..." else "Simpan Perubahan",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
+                    }
 
-                        KasirTextField(
-                            value = stockInQuantity,
-                            onValueChange = {
-                                stockInQuantity = it.onlyDigits()
-                                onClearMessage()
-                            },
-                            label = "Stok Masuk",
-                            leading = { BoxLineIcon() },
-                            keyboardType = KeyboardType.Number,
-                        )
+                    item {
+                        if (showDeleteConfirm) {
+                            DeleteConfirmationCard(
+                                isSaving = isSaving,
+                                onCancel = { showDeleteConfirm = false },
+                                onDelete = { onDelete(product) },
+                            )
+                        } else {
+                            Button(
+                                onClick = { showDeleteConfirm = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                enabled = !isSaving,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = Color.White,
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                            ) {
+                                Text(
+                                    text = "Hapus Barang",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            item {
-                Button(
-                    onClick = {
-                        onSave(
-                            product,
-                            name,
-                            category,
-                            purchasePrice,
-                            sellingPrice,
-                            stockInQuantity,
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = !isSaving,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = DeepGreen,
-                        contentColor = Color.White,
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                ) {
-                    Text(
-                        text = if (isSaving) "Menyimpan..." else "Simpan Perubahan",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            item {
-                if (showDeleteConfirm) {
-                    DeleteConfirmationCard(
-                        isSaving = isSaving,
-                        onCancel = { showDeleteConfirm = false },
-                        onDelete = { onDelete(product) },
-                    )
-                } else {
-                    Button(
-                        onClick = { showDeleteConfirm = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        enabled = !isSaving,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = Color.White,
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Text(
-                            text = "Hapus Barang",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
+        if (isImageSourcePanelVisible) {
+            ProductImageSourcePanel(
+                onDismiss = { isImageSourcePanelVisible = false },
+                onTakePhoto = {
+                    isImageSourcePanelVisible = false
+                    imagePickerActions.openCamera()
+                },
+                onPickFromGallery = {
+                    isImageSourcePanelVisible = false
+                    imagePickerActions.openGallery()
+                },
+            )
         }
     }
 }
@@ -768,6 +873,185 @@ private fun ProductTopBar(
     }
 }
 
+private data class ProductImagePickerActions(
+    val openCamera: () -> Unit,
+    val openGallery: () -> Unit,
+)
+
+@Composable
+private fun rememberProductImagePicker(
+    onImageSaved: (String) -> Unit,
+): ProductImagePickerActions {
+    val context = LocalContext.current
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { selectedUri ->
+        selectedUri?.let { uri ->
+            runCatching {
+                ProductImageStore.persistImage(context, uri)
+            }.onSuccess(onImageSaved)
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { isSuccess ->
+        if (isSuccess) {
+            pendingCameraUri?.let { uri ->
+                runCatching {
+                    ProductImageStore.persistImage(context, uri)
+                }.onSuccess(onImageSaved)
+            }
+        }
+        pendingCameraUri = null
+    }
+
+    return remember(context, galleryLauncher, cameraLauncher) {
+        ProductImagePickerActions(
+            openCamera = {
+                val uri = ProductImageStore.createCameraImageUri(context)
+                pendingCameraUri = uri
+                cameraLauncher.launch(uri)
+            },
+            openGallery = {
+                galleryLauncher.launch("image/*")
+            },
+        )
+    }
+}
+
+@Composable
+private fun ProductImageSourcePanel(
+    onDismiss: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onPickFromGallery: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.38f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ProductPanelHandle(onDismiss = onDismiss)
+
+                Text(
+                    text = "Foto Produk",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                ImageSourceOption(
+                    title = "Ambil Foto",
+                    description = "Gunakan kamera perangkat.",
+                    icon = Icons.Outlined.CameraAlt,
+                    onClick = onTakePhoto,
+                )
+
+                ImageSourceOption(
+                    title = "Pilih dari Galeri",
+                    description = "Ambil gambar yang sudah ada.",
+                    icon = Icons.Outlined.PhotoLibrary,
+                    onClick = onPickFromGallery,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageSourceOption(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(FreshMint, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = description,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberProductBitmap(imageUri: String?): Bitmap? {
+    val context = LocalContext.current
+    return remember(context, imageUri) {
+        imageUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ProductImageStore.loadBitmap(context = context, imageUri = it) }
+    }
+}
+
 @Composable
 private fun SearchAndFilterRow(
     searchQuery: String,
@@ -778,10 +1062,6 @@ private fun SearchAndFilterRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SquareIconButton {
-            HomeLineIcon()
-        }
-
         KasirTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
@@ -882,6 +1162,40 @@ private fun ProductCategorySelector(
 }
 
 @Composable
+private fun ProductPanelHandle(
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(onDismiss) {
+                var dragDistance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        dragDistance += dragAmount
+                        if (dragDistance > 56f) {
+                            change.consume()
+                            onDismiss()
+                        }
+                    },
+                    onDragEnd = { dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(6.dp)
+                .background(MutedText, RoundedCornerShape(50)),
+        )
+    }
+}
+
+@Composable
 private fun DeleteConfirmationCard(
     isSaving: Boolean,
     onCancel: () -> Unit,
@@ -976,9 +1290,21 @@ private fun LabeledKasirTextField(
 }
 
 @Composable
-private fun ProductImagePlaceholder() {
+private fun ProductImagePlaceholder(
+    imageUri: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    val bitmap = rememberProductBitmap(imageUri)
+    val clickModifier = if (onClick != null) {
+        Modifier.clickable { onClick() }
+    } else {
+        Modifier
+    }
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(clickModifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -996,32 +1322,46 @@ private fun ProductImagePlaceholder() {
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    CameraLineIcon()
-                    Text(
-                        text = "Tambahkan\nGambar",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(22.dp)),
+                        contentScale = ContentScale.Crop,
                     )
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CameraLineIcon()
+                        Text(
+                            text = "Tambahkan\nGambar",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(48.dp)
-                    .background(DeepGreen, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                PencilLineIcon()
+            if (onClick != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(48.dp)
+                        .background(DeepGreen, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    PencilLineIcon()
+                }
             }
         }
 
         Text(
-            text = "Gambar Produk (Opsional)",
+            text = if (onClick == null) "Gambar Produk (Opsional)" else "Ketuk untuk pilih gambar",
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
         )
@@ -1179,6 +1519,60 @@ private fun MessageCard(
 }
 
 @Composable
+private fun FloatingSuccessMessage(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, FreshMint),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(FreshMint, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Berhasil",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = message,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LoadingCard() {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1249,7 +1643,10 @@ private fun ProductItemCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProductThumbnail(productName = product.name)
+            ProductThumbnail(
+                productName = product.name,
+                imageUri = product.imageUri,
+            )
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -1294,32 +1691,42 @@ private fun ProductItemCard(
 }
 
 @Composable
-private fun ProductThumbnail(productName: String) {
+private fun ProductThumbnail(
+    productName: String,
+    imageUri: String?,
+) {
+    val bitmap = rememberProductBitmap(imageUri)
+
     Box(
         modifier = Modifier
             .size(74.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(SoftGray, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(DeepGreen.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = productName.firstOrNull()?.uppercaseChar()?.toString().orEmpty(),
-                color = DeepGreen,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(DeepGreen.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = productName.firstOrNull()?.uppercaseChar()?.toString().orEmpty(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
-}
-
-@Composable
-private fun HomeLineIcon() {
-    KasirIcon(Icons.Outlined.Home)
 }
 
 @Composable
@@ -1344,7 +1751,12 @@ private fun BarcodeLineIcon() {
 
 @Composable
 private fun MoneyLineIcon() {
-    KasirIcon(Icons.Outlined.AttachMoney)
+    Text(
+        text = "Rp",
+        color = DeepGreen,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
 }
 
 @Composable

@@ -48,6 +48,7 @@ class ProductRepositoryImpl(
                 purchasePrice = product.purchasePrice,
                 sellingPrice = product.sellingPrice,
                 stockQuantity = updatedStock,
+                imageUri = product.imageUri,
                 updatedAtMillis = updatedAtMillis,
             )
 
