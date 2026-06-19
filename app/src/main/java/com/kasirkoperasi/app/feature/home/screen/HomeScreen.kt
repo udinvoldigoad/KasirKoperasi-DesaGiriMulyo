@@ -3,16 +3,17 @@ package com.kasirkoperasi.app.feature.home.screen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -35,26 +37,25 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,7 +83,17 @@ fun HomeScreen(
     val products = uiState.products
     val todaySales = reportSummary.totalSales
     val todayProfit = reportSummary.totalProfit
-    val lowStockProducts = products.filter { it.stockQuantity <= 5 }
+    val profitPercentage = remember(todaySales, todayProfit) {
+        calculateProfitPercentage(
+            sales = todaySales,
+            profit = todayProfit,
+        )
+    }
+    val lowStockProducts by remember(products) {
+        derivedStateOf {
+            products.filter { it.stockQuantity <= 5 }
+        }
+    }
     val lowStock = lowStockProducts.size
     var showLowStockSheet by rememberSaveable { mutableStateOf(false) }
 
@@ -125,8 +136,8 @@ fun HomeScreen(
                     SmallMetricCard(
                         title = "Profit Hari Ini",
                         value = todayProfit.toRupiah(),
-                        caption = "+0%",
-                        icon = Icons.Outlined.Visibility,
+                        caption = "Margin $profitPercentage",
+                        icon = Icons.AutoMirrored.Outlined.TrendingUp,
                         modifier = Modifier.weight(1f),
                     )
                     SmallMetricCard(
@@ -279,7 +290,7 @@ private fun TodaySalesCard(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Visibility,
+                            imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
                             contentDescription = null,
                             modifier = Modifier.size(23.dp),
                             tint = Color.White,
@@ -384,61 +395,111 @@ private fun SmallMetricCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LowStockSheet(
     products: List<Product>,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CreamBackground,
-        dragHandle = null,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
     ) {
-        Column(
+        Box(
             modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .fillMaxHeight(0.72f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
         ) {
-            Text(
-                text = "Stok Menipis",
-                modifier = Modifier.fillMaxWidth(),
-                color = DeepGreen,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                HomePanelHandle(onDismiss = onDismiss)
 
-            Text(
-                text = "Barang dengan stok 5 atau kurang.",
-                modifier = Modifier.fillMaxWidth(),
-                color = MutedText,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-            )
+                Text(
+                    text = "Stok Menipis",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
 
-            if (products.isEmpty()) {
-                EmptyLowStockCard()
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(
-                        items = products,
-                        key = { it.id },
-                    ) { product ->
-                        LowStockProductRow(product = product)
+                Text(
+                    text = "Barang dengan stok 5 atau kurang.",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+
+                if (products.isEmpty()) {
+                    EmptyLowStockCard()
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(
+                            items = products,
+                            key = { it.id },
+                        ) { product ->
+                            LowStockProductRow(product = product)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HomePanelHandle(
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(onDismiss) {
+                var dragDistance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        dragDistance += dragAmount
+                        if (dragDistance > 56f) {
+                            change.consume()
+                            onDismiss()
+                        }
+                    },
+                    onDragEnd = { dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(6.dp)
+                .background(MutedText, RoundedCornerShape(50)),
+        )
     }
 }
 
@@ -765,4 +826,14 @@ private fun Long.toRupiah(): String {
         .reversed()
 
     return "Rp$grouped"
+}
+
+private fun calculateProfitPercentage(
+    sales: Long,
+    profit: Long,
+): String {
+    if (sales <= 0L) return "0%"
+
+    val percentage = (profit * 100) / sales
+    return "$percentage%"
 }
