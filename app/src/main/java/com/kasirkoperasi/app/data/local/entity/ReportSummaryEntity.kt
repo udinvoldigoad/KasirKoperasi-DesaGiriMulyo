@@ -7,8 +7,6 @@ data class ReportSummaryEntity(
     val totalSales: Long = 0L,
     @ColumnInfo(name = "total_profit")
     val totalProfit: Long = 0L,
-    @ColumnInfo(name = "total_debt")
-    val totalDebt: Long = 0L,
     @ColumnInfo(name = "sold_item_count")
     val soldItemCount: Int = 0,
     @ColumnInfo(name = "low_stock_item_count")

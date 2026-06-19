@@ -132,15 +132,8 @@ class TransactionViewModel(
 
     fun selectPaymentMethod(method: PaymentMethod) {
         _uiState.update {
-            val paidAmount = if (method == PaymentMethod.Debt) {
-                it.paidAmount.coerceAtMost((it.totalAmount - 1).coerceAtLeast(0L))
-            } else {
-                it.paidAmount
-            }
-
             it.copy(
                 selectedPaymentMethod = method,
-                paidAmountText = paidAmount.toPaymentText(),
                 errorMessage = null,
                 successMessage = null,
             )
@@ -150,14 +143,9 @@ class TransactionViewModel(
     fun updatePaidAmount(value: String) {
         _uiState.update {
             val typedAmount = value.filter { char -> char.isDigit() }.toLongOrNull() ?: 0L
-            val paidAmount = if (it.selectedPaymentMethod == PaymentMethod.Debt) {
-                typedAmount.coerceAtMost((it.totalAmount - 1).coerceAtLeast(0L))
-            } else {
-                typedAmount
-            }
 
             it.copy(
-                paidAmountText = paidAmount.toPaymentText(),
+                paidAmountText = typedAmount.toPaymentText(),
                 errorMessage = null,
                 successMessage = null,
             )
@@ -166,10 +154,6 @@ class TransactionViewModel(
 
     fun useExactAmount() {
         _uiState.update {
-            if (it.selectedPaymentMethod == PaymentMethod.Debt) {
-                return@update it.copy(errorMessage = null, successMessage = null)
-            }
-
             it.copy(
                 paidAmountText = it.totalAmount.toString(),
                 errorMessage = null,
@@ -190,13 +174,6 @@ class TransactionViewModel(
             currentState.paidAmount < currentState.totalAmount
         ) {
             _uiState.update { it.copy(errorMessage = "Uang dibayarkan masih kurang") }
-            return
-        }
-
-        if (currentState.selectedPaymentMethod == PaymentMethod.Debt &&
-            currentState.paidAmount >= currentState.totalAmount
-        ) {
-            _uiState.update { it.copy(errorMessage = "Nominal hutang harus kurang dari total") }
             return
         }
 

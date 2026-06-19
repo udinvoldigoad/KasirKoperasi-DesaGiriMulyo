@@ -562,7 +562,7 @@ private fun MenuGrid(
             MenuCard(
                 title = "Riwayat",
                 icon = Icons.Outlined.History,
-                onClick = { onRouteSelected(AppRoute.Transaction.route) },
+                onClick = { onRouteSelected(AppRoute.History.route) },
                 modifier = Modifier.weight(1f),
             )
             MenuCard(

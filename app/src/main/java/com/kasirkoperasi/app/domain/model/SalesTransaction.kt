@@ -9,7 +9,6 @@ data class SalesTransaction(
     val totalProfit: Long,
     val paidAmount: Long,
     val changeAmount: Long,
-    val debtAmount: Long,
     val itemCount: Int,
     val createdAtMillis: Long,
 )

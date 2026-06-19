@@ -16,11 +16,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.di.AppContainer
-import com.kasirkoperasi.app.feature.home.screen.ComingSoonScreen
+import com.kasirkoperasi.app.feature.history.screen.TransactionHistoryScreen
+import com.kasirkoperasi.app.feature.history.viewmodel.TransactionHistoryViewModel
+import com.kasirkoperasi.app.feature.history.viewmodel.TransactionHistoryViewModelFactory
 import com.kasirkoperasi.app.feature.home.screen.HomeScreen
 import com.kasirkoperasi.app.feature.product.screen.ProductScreen
 import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModel
 import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModelFactory
+import com.kasirkoperasi.app.feature.report.screen.ReportScreen
 import com.kasirkoperasi.app.feature.report.viewmodel.ReportViewModel
 import com.kasirkoperasi.app.feature.report.viewmodel.ReportViewModelFactory
 import com.kasirkoperasi.app.feature.transaction.screen.TransactionScreen
@@ -54,6 +57,12 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private val transactionHistoryViewModel: TransactionHistoryViewModel by viewModels {
+        TransactionHistoryViewModelFactory(
+            getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -70,6 +79,7 @@ class MainActivity : ComponentActivity() {
             val productUiState by productViewModel.uiState.collectAsState()
             val transactionUiState by transactionViewModel.uiState.collectAsState()
             val reportUiState by reportViewModel.uiState.collectAsState()
+            val transactionHistoryUiState by transactionHistoryViewModel.uiState.collectAsState()
             var selectedRoute by rememberSaveable { mutableStateOf(AppRoute.Home.route) }
 
             KasirKoperasiTheme {
@@ -117,15 +127,28 @@ class MainActivity : ComponentActivity() {
                             onTransactionSaved = {
                                 productViewModel.loadProducts()
                                 reportViewModel.loadTodaySummary()
+                                transactionHistoryViewModel.loadTransactions()
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
                     AppRoute.Report.route -> {
-                        ComingSoonScreen(
-                            title = AppRoute.Report.title,
+                        ReportScreen(
+                            uiState = reportUiState,
                             selectedRoute = selectedRoute,
+                            onRouteSelected = { selectedRoute = it },
+                            onOpenHistory = { selectedRoute = AppRoute.History.route },
+                            onRefresh = reportViewModel::loadTodaySummary,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    AppRoute.History.route -> {
+                        TransactionHistoryScreen(
+                            uiState = transactionHistoryUiState,
+                            onRangeSelected = transactionHistoryViewModel::selectRange,
+                            onRefresh = { transactionHistoryViewModel.loadTransactions() },
                             onRouteSelected = { selectedRoute = it },
                             modifier = Modifier.fillMaxSize(),
                         )

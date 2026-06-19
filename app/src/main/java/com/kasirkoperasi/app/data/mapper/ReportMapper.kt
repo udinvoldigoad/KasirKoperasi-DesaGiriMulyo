@@ -6,7 +6,6 @@ import com.kasirkoperasi.app.domain.model.ReportSummary
 fun ReportSummaryEntity.toDomain(): ReportSummary = ReportSummary(
     totalSales = totalSales,
     totalProfit = totalProfit,
-    totalDebt = totalDebt,
     soldItemCount = soldItemCount,
     lowStockItemCount = lowStockItemCount,
 )

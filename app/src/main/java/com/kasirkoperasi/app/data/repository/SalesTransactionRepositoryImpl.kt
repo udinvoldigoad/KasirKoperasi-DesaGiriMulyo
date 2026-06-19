@@ -59,15 +59,12 @@ class SalesTransactionRepositoryImpl(
             }
             val itemCount = productSnapshots.sumOf { (_, quantity) -> quantity }
             val paymentMethod = payment.paymentMethod
+            require(paymentMethod == PAYMENT_METHOD_CASH || paymentMethod == PAYMENT_METHOD_QRIS) {
+                "Metode pembayaran tidak valid"
+            }
             val normalizedPaidAmount = when (paymentMethod) {
                 PAYMENT_METHOD_QRIS -> totalAmount
-                PAYMENT_METHOD_DEBT -> payment.paidAmount.coerceIn(0L, (totalAmount - 1).coerceAtLeast(0L))
                 else -> payment.paidAmount.coerceAtLeast(0L)
-            }
-            val debtAmount = if (paymentMethod == PAYMENT_METHOD_DEBT) {
-                (totalAmount - normalizedPaidAmount).coerceAtLeast(0L)
-            } else {
-                0L
             }
             val changeAmount = if (paymentMethod == PAYMENT_METHOD_CASH) {
                 (normalizedPaidAmount - totalAmount).coerceAtLeast(0L)
@@ -88,7 +85,7 @@ class SalesTransactionRepositoryImpl(
                     totalProfit = totalProfit,
                     paidAmount = normalizedPaidAmount,
                     changeAmount = changeAmount,
-                    debtAmount = debtAmount,
+                    legacyAmount = 0L,
                     itemCount = itemCount,
                     createdAtMillis = createdAtMillis,
                 ),
@@ -147,6 +144,5 @@ class SalesTransactionRepositoryImpl(
     private companion object {
         const val PAYMENT_METHOD_CASH = "Cash"
         const val PAYMENT_METHOD_QRIS = "QRIS"
-        const val PAYMENT_METHOD_DEBT = "Hutang"
     }
 }

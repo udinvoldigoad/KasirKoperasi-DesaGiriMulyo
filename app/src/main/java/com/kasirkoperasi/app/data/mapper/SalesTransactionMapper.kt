@@ -9,12 +9,11 @@ fun SalesTransactionEntity.toDomain(): SalesTransaction = SalesTransaction(
     id = id,
     transactionNumber = transactionNumber,
     buyerName = buyerName,
-    paymentMethod = paymentMethod,
+    paymentMethod = paymentMethod.toSupportedPaymentMethod(),
     totalAmount = totalAmount,
     totalProfit = totalProfit,
-    paidAmount = paidAmount,
+    paidAmount = if (paymentMethod.isSupportedPaymentMethod()) paidAmount else totalAmount,
     changeAmount = changeAmount,
-    debtAmount = debtAmount,
     itemCount = itemCount,
     createdAtMillis = createdAtMillis,
 )
@@ -32,3 +31,11 @@ fun SalesTransactionItemEntity.toDomain(): SalesTransactionItem = SalesTransacti
     subtotal = subtotal,
     profit = profit,
 )
+
+private fun String.isSupportedPaymentMethod(): Boolean {
+    return equals("Cash", ignoreCase = true) || equals("QRIS", ignoreCase = true)
+}
+
+private fun String.toSupportedPaymentMethod(): String {
+    return if (equals("QRIS", ignoreCase = true)) "QRIS" else "Cash"
+}

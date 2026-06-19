@@ -11,7 +11,6 @@ interface ReportDao {
         SELECT
             COALESCE(SUM(total_amount), 0) AS total_sales,
             COALESCE(SUM(total_profit), 0) AS total_profit,
-            COALESCE(SUM(debt_amount), 0) AS total_debt,
             COALESCE(SUM(item_count), 0) AS sold_item_count,
             (
                 SELECT COUNT(*)

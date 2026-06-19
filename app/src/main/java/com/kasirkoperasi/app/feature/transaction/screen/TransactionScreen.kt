@@ -452,8 +452,6 @@ private fun PaymentSheetContent(
     onBackToCart: () -> Unit,
     onCompleteTransaction: () -> Unit,
 ) {
-    val isDebtPayment = uiState.selectedPaymentMethod == PaymentMethod.Debt
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -525,7 +523,7 @@ private fun PaymentSheetContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf(PaymentMethod.Cash, PaymentMethod.Qris, PaymentMethod.Debt).forEach { method ->
+            listOf(PaymentMethod.Cash, PaymentMethod.Qris).forEach { method ->
                 PaymentMethodButton(
                     method = method,
                     isSelected = uiState.selectedPaymentMethod == method,
@@ -544,7 +542,7 @@ private fun PaymentSheetContent(
                 value = uiState.paidAmountText,
                 onValueChange = onPaidAmountChange,
                 modifier = Modifier.weight(1f),
-                label = { Text(if (isDebtPayment) "Dibayar sekarang" else "Uang dibayarkan") },
+                label = { Text("Uang dibayarkan") },
                 prefix = { Text("Rp") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -559,13 +557,10 @@ private fun PaymentSheetContent(
             )
             Button(
                 onClick = onUseExactAmount,
-                enabled = !isDebtPayment,
                 modifier = Modifier.height(56.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = FreshMint,
                     contentColor = DeepGreen,
-                    disabledContainerColor = SoftGray,
-                    disabledContentColor = MutedText,
                 ),
                 shape = RoundedCornerShape(14.dp),
             ) {
@@ -665,20 +660,11 @@ private fun PaymentMethodButton(
 private fun ChangeInfoCard(
     uiState: TransactionUiState,
 ) {
-    val isDebtPayment = uiState.selectedPaymentMethod == PaymentMethod.Debt
     val isCashShort = uiState.selectedPaymentMethod == PaymentMethod.Cash &&
         uiState.paidAmount in 1 until uiState.totalAmount
-    val title = when {
-        isDebtPayment -> "Sisa Hutang"
-        isCashShort -> "Uang Kurang"
-        else -> "Kembalian"
-    }
-    val amount = when {
-        isDebtPayment -> uiState.debtAmount
-        isCashShort -> uiState.totalAmount - uiState.paidAmount
-        else -> uiState.changeAmount
-    }
-    val color = if (isDebtPayment || isCashShort) MaterialTheme.colorScheme.error else DeepGreen
+    val title = if (isCashShort) "Uang Kurang" else "Kembalian"
+    val amount = if (isCashShort) uiState.totalAmount - uiState.paidAmount else uiState.changeAmount
+    val color = if (isCashShort) MaterialTheme.colorScheme.error else DeepGreen
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),

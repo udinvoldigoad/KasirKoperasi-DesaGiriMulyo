@@ -23,13 +23,6 @@ data class TransactionUiState(
 
     val changeAmount: Long
         get() = (paidAmount - totalAmount).coerceAtLeast(0L)
-
-    val debtAmount: Long
-        get() = if (selectedPaymentMethod == PaymentMethod.Debt) {
-            (totalAmount - paidAmount).coerceAtLeast(0L)
-        } else {
-            0L
-        }
 }
 
 data class CartItem(
@@ -45,5 +38,4 @@ enum class PaymentMethod(
 ) {
     Cash("Cash"),
     Qris("QRIS"),
-    Debt("Hutang"),
 }

@@ -30,7 +30,7 @@ data class SalesTransactionEntity(
     @ColumnInfo(name = "change_amount")
     val changeAmount: Long,
     @ColumnInfo(name = "debt_amount")
-    val debtAmount: Long,
+    val legacyAmount: Long = 0L,
     @ColumnInfo(name = "item_count")
     val itemCount: Int,
     @ColumnInfo(name = "created_at_millis")
