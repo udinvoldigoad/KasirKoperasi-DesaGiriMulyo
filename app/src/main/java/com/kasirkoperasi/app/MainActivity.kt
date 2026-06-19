@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     private val transactionHistoryViewModel: TransactionHistoryViewModel by viewModels {
         TransactionHistoryViewModelFactory(
             getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
+            getSalesTransactionItemsUseCase = appContainer.getSalesTransactionItemsUseCase,
         )
     }
 
@@ -149,6 +150,8 @@ class MainActivity : ComponentActivity() {
                             uiState = transactionHistoryUiState,
                             onRangeSelected = transactionHistoryViewModel::selectRange,
                             onRefresh = { transactionHistoryViewModel.loadTransactions() },
+                            onTransactionSelected = transactionHistoryViewModel::openTransactionDetail,
+                            onDismissDetail = transactionHistoryViewModel::dismissTransactionDetail,
                             onRouteSelected = { selectedRoute = it },
                             modifier = Modifier.fillMaxSize(),
                         )

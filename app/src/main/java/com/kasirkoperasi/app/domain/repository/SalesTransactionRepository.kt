@@ -2,6 +2,7 @@ package com.kasirkoperasi.app.domain.repository
 
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionDraftItem
+import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import com.kasirkoperasi.app.domain.model.SalesTransactionPayment
 
 interface SalesTransactionRepository {
@@ -14,4 +15,6 @@ interface SalesTransactionRepository {
         startDateMillis: Long,
         endDateMillis: Long,
     ): List<SalesTransaction>
+
+    suspend fun getTransactionItems(transactionId: Long): List<SalesTransactionItem>
 }

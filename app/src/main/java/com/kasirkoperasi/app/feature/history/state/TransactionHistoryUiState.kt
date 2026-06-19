@@ -1,12 +1,17 @@
 package com.kasirkoperasi.app.feature.history.state
 
 import com.kasirkoperasi.app.domain.model.SalesTransaction
+import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 
 data class TransactionHistoryUiState(
     val isLoading: Boolean = false,
+    val isDetailLoading: Boolean = false,
     val selectedRange: TransactionHistoryRange = TransactionHistoryRange.Today,
     val transactions: List<SalesTransaction> = emptyList(),
+    val selectedTransaction: SalesTransaction? = null,
+    val selectedTransactionItems: List<SalesTransactionItem> = emptyList(),
     val errorMessage: String? = null,
+    val detailErrorMessage: String? = null,
 ) {
     val totalSales: Long
         get() = transactions.sumOf { it.totalAmount }

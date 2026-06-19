@@ -2,6 +2,8 @@ package com.kasirkoperasi.app.feature.history.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kasirkoperasi.app.domain.model.SalesTransaction
+import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionItemsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.feature.history.state.TransactionHistoryRange
 import com.kasirkoperasi.app.feature.history.state.TransactionHistoryUiState
@@ -14,6 +16,7 @@ import kotlinx.coroutines.launch
 
 class TransactionHistoryViewModel(
     private val getSalesTransactionsUseCase: GetSalesTransactionsUseCase,
+    private val getSalesTransactionItemsUseCase: GetSalesTransactionItemsUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TransactionHistoryUiState())
     val uiState: StateFlow<TransactionHistoryUiState> = _uiState.asStateFlow()
@@ -36,6 +39,9 @@ class TransactionHistoryViewModel(
                 it.copy(
                     isLoading = true,
                     selectedRange = range,
+                    selectedTransaction = null,
+                    selectedTransactionItems = emptyList(),
+                    detailErrorMessage = null,
                     errorMessage = null,
                 )
             }
@@ -60,6 +66,48 @@ class TransactionHistoryViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun openTransactionDetail(transaction: SalesTransaction) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    selectedTransaction = transaction,
+                    selectedTransactionItems = emptyList(),
+                    isDetailLoading = true,
+                    detailErrorMessage = null,
+                )
+            }
+
+            runCatching {
+                getSalesTransactionItemsUseCase(transaction.id)
+            }.onSuccess { items ->
+                _uiState.update {
+                    it.copy(
+                        isDetailLoading = false,
+                        selectedTransactionItems = items,
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isDetailLoading = false,
+                        detailErrorMessage = throwable.message ?: "Gagal memuat detail transaksi",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissTransactionDetail() {
+        _uiState.update {
+            it.copy(
+                selectedTransaction = null,
+                selectedTransactionItems = emptyList(),
+                isDetailLoading = false,
+                detailErrorMessage = null,
+            )
         }
     }
 

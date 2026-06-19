@@ -11,6 +11,7 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
 import com.kasirkoperasi.app.data.mapper.toDomain
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionDraftItem
+import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import com.kasirkoperasi.app.domain.model.SalesTransactionPayment
 import com.kasirkoperasi.app.domain.model.StockMovementType
 import com.kasirkoperasi.app.domain.repository.SalesTransactionRepository
@@ -139,6 +140,12 @@ class SalesTransactionRepositoryImpl(
             startDateMillis = startDateMillis,
             endDateMillis = endDateMillis,
         ).map { it.toDomain() }
+    }
+
+    override suspend fun getTransactionItems(transactionId: Long): List<SalesTransactionItem> {
+        require(transactionId > 0L) { "Transaksi tidak valid" }
+
+        return salesTransactionDao.getItems(transactionId).map { it.toDomain() }
     }
 
     private companion object {
