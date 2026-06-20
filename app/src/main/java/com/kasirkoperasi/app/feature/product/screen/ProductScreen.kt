@@ -2,6 +2,7 @@ package com.kasirkoperasi.app.feature.product.screen
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -240,6 +241,10 @@ private fun ProductListScreen(
         }
     }
 
+    BackHandler(enabled = isStockFilterPanelVisible) {
+        isStockFilterPanelVisible = false
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -395,6 +400,8 @@ private fun ProductFormScreen(
     val imagePickerActions = rememberProductImagePicker(
         onImageSaved = { imageUri = it },
     )
+
+    BackHandler(onBack = onBackClick)
 
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
@@ -628,6 +635,13 @@ private fun ProductEditSheet(
     val imagePickerActions = rememberProductImagePicker(
         onImageSaved = { imageUri = it },
     )
+
+    BackHandler(enabled = showDeleteConfirm) {
+        showDeleteConfirm = false
+    }
+    BackHandler(enabled = !showDeleteConfirm) {
+        onDismiss()
+    }
 
     Box(
         modifier = Modifier
@@ -976,6 +990,8 @@ private fun ProductImageSourcePanel(
     onTakePhoto: () -> Unit,
     onPickFromGallery: () -> Unit,
 ) {
+    BackHandler(onBack = onDismiss)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1154,6 +1170,8 @@ private fun ProductStockFilterPanel(
     onSortSelected: (ProductStockSort) -> Unit,
 ) {
     val panelHeight = if (selectedSort == ProductStockSort.Default) 0.46f else 0.56f
+
+    BackHandler(onBack = onDismiss)
 
     Box(
         modifier = Modifier

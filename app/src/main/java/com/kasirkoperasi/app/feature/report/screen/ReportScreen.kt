@@ -1,5 +1,6 @@
 package com.kasirkoperasi.app.feature.report.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -95,6 +96,10 @@ fun ReportScreen(
 ) {
     var isExportRangePanelVisible by remember { mutableStateOf(false) }
     val isShowingLoadingModal = uiState.isLoading || uiState.isExporting
+
+    BackHandler(enabled = isExportRangePanelVisible) {
+        isExportRangePanelVisible = false
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(

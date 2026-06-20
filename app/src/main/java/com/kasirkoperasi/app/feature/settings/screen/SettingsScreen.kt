@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Storefront
@@ -84,12 +85,14 @@ fun SettingsScreen(
     onSaveStoreName: (String) -> Unit,
     onLogoSelected: (Uri) -> Unit,
     onImportCsvSelected: (Uri) -> Unit,
+    onGenerateBarcodeSheet: () -> Unit,
     onLoadPrinters: () -> Unit,
     onPrinterSelected: (BluetoothPrinterDevice) -> Unit,
     onTestPrinter: () -> Unit,
     onPrinterPermissionDenied: () -> Unit,
     onClearMessage: () -> Unit,
     modifier: Modifier = Modifier,
+    canGenerateBarcodeSheet: Boolean = false,
 ) {
     var storeName by rememberSaveable { mutableStateOf(uiState.storeName) }
     var pendingPrinterAction by rememberSaveable { mutableStateOf<PrinterPermissionAction?>(null) }
@@ -179,22 +182,20 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {
-                    StoreIdentityCard(
-                        storeName = uiState.storeName,
-                        logoUri = uiState.logoUri,
-                        isSaving = uiState.isSaving,
-                        onChangeLogoClick = {
-                            logoPickerLauncher.launch("image/*")
-                        },
-                    )
+                    SettingsIntroCard()
                 }
 
                 item {
-                    StoreNameCard(
+                    StoreProfileSettingsCard(
                         storeName = storeName,
+                        savedStoreName = uiState.storeName,
+                        logoUri = uiState.logoUri,
                         isSaving = uiState.isSaving,
                         onStoreNameChange = { storeName = it },
                         onSaveClick = { onSaveStoreName(storeName) },
+                        onChangeLogoClick = {
+                            logoPickerLauncher.launch("image/*")
+                        },
                     )
                 }
 
@@ -216,24 +217,12 @@ fun SettingsScreen(
                 }
 
                 item {
-                    SettingsActionCard(
-                        title = "Ekspor Data (Backup)",
-                        description = "Backup data lokal akan disiapkan di tahap berikutnya.",
-                        icon = Icons.Outlined.FileUpload,
-                        enabled = false,
-                        actionLabel = "Nonaktif",
-                        onClick = {},
-                    )
-                }
-
-                item {
-                    SettingsActionCard(
-                        title = "Import CSV Produk",
-                        description = "Pilih file CSV dengan kolom kode, nama, kategori, harga, stok, dan satuan.",
-                        icon = Icons.Outlined.FileDownload,
-                        enabled = !uiState.isSaving && !uiState.isImporting,
-                        actionLabel = if (uiState.isImporting) "Mengimport..." else "Pilih CSV",
-                        onClick = {
+                    DataProductSettingsCard(
+                        isImporting = uiState.isImporting,
+                        canImport = !uiState.isSaving && !uiState.isImporting,
+                        canGenerateBarcodeSheet = canGenerateBarcodeSheet,
+                        onGenerateBarcodeSheetClick = onGenerateBarcodeSheet,
+                        onImportClick = {
                             csvImportLauncher.launch(CSV_MIME_TYPES)
                         },
                     )
@@ -293,6 +282,193 @@ private fun SettingsTopBar(
                 textAlign = TextAlign.Center,
             )
             Spacer(modifier = Modifier.size(40.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingsIntroCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = DeepGreen),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .background(Color.White.copy(alpha = 0.16f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Storefront,
+                    contentDescription = null,
+                    modifier = Modifier.size(30.dp),
+                    tint = Color.White,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "Pengaturan Aplikasi",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Atur identitas koperasi, printer struk, dan data produk dari satu tempat.",
+                    color = Color.White.copy(alpha = 0.82f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoreProfileSettingsCard(
+    storeName: String,
+    savedStoreName: String,
+    logoUri: String?,
+    isSaving: Boolean,
+    onStoreNameChange: (String) -> Unit,
+    onSaveClick: () -> Unit,
+    onChangeLogoClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            NumberedSectionHeader(
+                number = "1",
+                title = "Identitas Toko",
+                subtitle = "Logo dan nama ini muncul di navbar aplikasi dan struk.",
+                icon = Icons.Outlined.Storefront,
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = FreshMint.copy(alpha = 0.56f),
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    KoperasiLogo(
+                        logoUri = logoUri,
+                        fallbackText = savedStoreName.firstOrNull()?.uppercaseChar()?.toString() ?: "K",
+                        size = 68.dp,
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = savedStoreName.ifBlank { DEFAULT_STORE_NAME },
+                            color = Color(0xFF17221B),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "Pratinjau tampilan toko saat ini.",
+                            color = MutedText,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = storeName,
+                onValueChange = onStoreNameChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isSaving,
+                label = { Text("Nama toko/koperasi") },
+                placeholder = { Text(DEFAULT_STORE_NAME) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = DeepGreen,
+                    unfocusedBorderColor = LineSoft,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    cursorColor = DeepGreen,
+                ),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onChangeLogoClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, LineSoft),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(
+                        text = "Ganti Logo",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                Button(
+                    onClick = onSaveClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    enabled = !isSaving,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                        disabledContainerColor = SoftGray,
+                        disabledContentColor = MutedText,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Save,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(
+                        text = if (isSaving) "Menyimpan" else "Simpan",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
 }
@@ -461,39 +637,63 @@ private fun PrinterConnectionCard(
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionHeader(
-                title = "Koneksi Printer",
-                subtitle = "Pilih printer Bluetooth yang sudah dipairing di HP.",
+            NumberedSectionHeader(
+                number = "2",
+                title = "Printer Struk",
+                subtitle = "Pilih printer thermal yang akan dipakai saat mencetak struk.",
                 icon = Icons.Outlined.Print,
             )
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = FreshMint.copy(alpha = 0.62f),
+                shape = RoundedCornerShape(18.dp),
+                color = if (selectedPrinterName.isNullOrBlank()) SoftGray else FreshMint.copy(alpha = 0.68f),
+                border = BorderStroke(
+                    1.dp,
+                    if (selectedPrinterName.isNullOrBlank()) LineSoft else DeepGreen.copy(alpha = 0.22f),
+                ),
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     Text(
                         text = if (selectedPrinterName.isNullOrBlank()) {
                             "Printer belum dipilih"
                         } else {
-                            "Printer terpilih: $selectedPrinterName"
+                            "Siap cetak dengan $selectedPrinterName"
                         },
                         color = DeepGreen,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = selectedPrinterAddress ?: "Pairing printer dulu dari pengaturan Bluetooth HP.",
+                        text = selectedPrinterAddress
+                            ?: "Nyalakan printer, lalu pairing dari pengaturan Bluetooth HP sebelum memilih di sini.",
                         color = MutedText,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                InstructionRow(
+                    number = "1",
+                    text = "Pastikan printer sudah tersanding di Bluetooth HP.",
+                )
+                InstructionRow(
+                    number = "2",
+                    text = "Tekan Cari Printer, lalu pilih nama printer yang benar.",
+                )
+                InstructionRow(
+                    number = "3",
+                    text = "Tekan Coba Cetak untuk memastikan struk keluar.",
+                )
             }
 
             Row(
@@ -516,7 +716,7 @@ private fun PrinterConnectionCard(
                     )
                     Spacer(modifier = Modifier.size(8.dp))
                     Text(
-                        text = if (isLoadingPrinters) "Memuat..." else "Muat Perangkat",
+                        text = if (isLoadingPrinters) "Mencari..." else "Cari Printer",
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -536,25 +736,39 @@ private fun PrinterConnectionCard(
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(
-                        text = if (isTestingPrinter) "Testing..." else "Test Print",
+                        text = if (isTestingPrinter) "Mencetak..." else "Coba Cetak",
                         fontWeight = FontWeight.Bold,
                     )
                 }
             }
 
             if (pairedPrinters.isEmpty()) {
-                Text(
-                    text = "Tekan Muat Perangkat untuk menampilkan daftar Bluetooth yang sudah tersanding.",
-                    color = MutedText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    shape = RoundedCornerShape(16.dp),
+                    color = CreamBackground,
+                    border = BorderStroke(1.dp, LineSoft),
+                ) {
+                    Text(
+                        text = "Belum ada daftar printer. Tekan Cari Printer setelah printer dipairing di HP.",
+                        modifier = Modifier.padding(14.dp),
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             } else {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    Text(
+                        text = "Pilih printer:",
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+
                     pairedPrinters.forEach { printer ->
                         PrinterDeviceRow(
                             printer = printer,
@@ -702,6 +916,162 @@ private fun SettingsActionCard(
     }
 }
 
+@Composable
+private fun DataProductSettingsCard(
+    isImporting: Boolean,
+    canImport: Boolean,
+    canGenerateBarcodeSheet: Boolean,
+    onGenerateBarcodeSheetClick: () -> Unit,
+    onImportClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            NumberedSectionHeader(
+                number = "3",
+                title = "Data Produk",
+                subtitle = "Gunakan bagian ini untuk data barang dan barcode rak produk.",
+                icon = Icons.Outlined.FileDownload,
+            )
+
+            DataToolRow(
+                title = "Generate Barcode Produk A4",
+                description = "Membuat PDF A4 berisi barcode garis semua produk.",
+                icon = Icons.Outlined.QrCodeScanner,
+                enabled = canGenerateBarcodeSheet,
+                isPrimary = true,
+                actionLabel = if (canGenerateBarcodeSheet) "Buat PDF Barcode" else "Belum ada barcode",
+                onClick = onGenerateBarcodeSheetClick,
+            )
+
+            DataToolRow(
+                title = "Import Produk dari CSV",
+                description = "Pakai file tabel CSV agar data barang tidak perlu diketik satu per satu.",
+                icon = Icons.Outlined.FileDownload,
+                enabled = canImport,
+                isPrimary = true,
+                actionLabel = if (isImporting) "Sedang import..." else "Pilih File CSV",
+                onClick = onImportClick,
+            )
+
+            DataToolRow(
+                title = "Backup Data",
+                description = "Nanti dipakai untuk menyimpan cadangan data toko dari perangkat ini.",
+                icon = Icons.Outlined.FileUpload,
+                enabled = false,
+                isPrimary = false,
+                actionLabel = "Belum tersedia",
+                onClick = {},
+            )
+        }
+    }
+}
+
+@Composable
+private fun DataToolRow(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    isPrimary: Boolean,
+    actionLabel: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = if (enabled) FreshMint.copy(alpha = 0.58f) else SoftGray,
+        border = BorderStroke(1.dp, if (enabled) DeepGreen.copy(alpha = 0.18f) else LineSoft),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(if (enabled) DeepGreen else Color.White, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = if (enabled) Color.White else MutedText,
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = title,
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = description,
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            if (isPrimary) {
+                Button(
+                    onClick = onClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    enabled = enabled,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                        disabledContainerColor = SoftGray,
+                        disabledContentColor = MutedText,
+                    ),
+                    shape = RoundedCornerShape(15.dp),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    enabled = enabled,
+                    shape = RoundedCornerShape(15.dp),
+                    border = BorderStroke(1.dp, LineSoft),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
 private val CSV_MIME_TYPES = arrayOf(
     "text/*",
     "text/csv",
@@ -713,6 +1083,98 @@ private val CSV_MIME_TYPES = arrayOf(
 private enum class PrinterPermissionAction {
     LoadPrinters,
     TestPrint,
+}
+
+@Composable
+private fun NumberedSectionHeader(
+    number: String,
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(DeepGreen, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = number,
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                color = Color(0xFF17221B),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = subtitle,
+                color = MutedText,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(FreshMint, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(21.dp),
+                tint = DeepGreen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun InstructionRow(
+    number: String,
+    text: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(FreshMint, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = number,
+                color = DeepGreen,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
 }
 
 @Composable

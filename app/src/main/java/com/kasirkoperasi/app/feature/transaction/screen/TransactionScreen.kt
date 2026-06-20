@@ -4,6 +4,7 @@ import android.Manifest
 import android.graphics.Bitmap
 import android.os.Build
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -253,6 +254,14 @@ fun TransactionScreen(
                 }
             }
         Unit
+    }
+
+    BackHandler(enabled = shouldShowSuccessDialog) {
+        isSuccessDialogVisible = false
+        onClearMessage()
+    }
+    BackHandler(enabled = activeSheet != null) {
+        activeSheet = null
     }
 
     Box(modifier = modifier.fillMaxSize()) {

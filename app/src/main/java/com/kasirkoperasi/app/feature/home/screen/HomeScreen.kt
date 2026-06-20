@@ -1,5 +1,6 @@
 package com.kasirkoperasi.app.feature.home.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -413,6 +413,8 @@ private fun LowStockSheet(
     products: List<Product>,
     onDismiss: () -> Unit,
 ) {
+    BackHandler(onBack = onDismiss)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -611,20 +613,23 @@ private fun MenuGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MenuCard(
-                title = "PRODUK",
-                icon = Icons.Outlined.ShoppingCart,
+                title = "Produk",
+                icon = Icons.Outlined.Inventory2,
+                accentColor = DeepGreen,
                 onClick = { onRouteSelected(AppRoute.Product.route) },
                 modifier = Modifier.weight(1f),
             )
             MenuCard(
                 title = "Scan\nBarcode",
                 icon = Icons.Outlined.QrCodeScanner,
+                accentColor = Color(0xFF0E7490),
                 onClick = onScanBarcode,
                 modifier = Modifier.weight(1f),
             )
             MenuCard(
                 title = "Transaksi",
                 icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                accentColor = Color(0xFFB45309),
                 onClick = { onRouteSelected(AppRoute.Transaction.route) },
                 modifier = Modifier.weight(1f),
             )
@@ -637,18 +642,21 @@ private fun MenuGrid(
             MenuCard(
                 title = "Riwayat",
                 icon = Icons.Outlined.History,
+                accentColor = Color(0xFF7C3AED),
                 onClick = { onRouteSelected(AppRoute.History.route) },
                 modifier = Modifier.weight(1f),
             )
             MenuCard(
                 title = "Laporan",
                 icon = Icons.Outlined.BarChart,
+                accentColor = Color(0xFF15803D),
                 onClick = { onRouteSelected(AppRoute.Report.route) },
                 modifier = Modifier.weight(1f),
             )
             MenuCard(
                 title = "Setting",
                 icon = Icons.Outlined.Settings,
+                accentColor = Color(0xFF475569),
                 onClick = { onRouteSelected(AppRoute.Settings.route) },
                 modifier = Modifier.weight(1f),
             )
@@ -660,48 +668,73 @@ private fun MenuGrid(
 private fun MenuCard(
     title: String,
     icon: ImageVector,
+    accentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier
-            .height(150.dp)
+            .height(136.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, LineSoft),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.16f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
+                .background(accentColor.copy(alpha = 0.045f)),
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(SoftGray, CircleShape),
-                contentAlignment = Alignment.Center,
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(31.dp),
-                    tint = DeepGreen,
-                )
-            }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = accentColor.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.08f)),
+                ) {
+                    Box(
+                        modifier = Modifier.size(58.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(31.dp),
+                            tint = accentColor,
+                        )
+                    }
+                }
 
-            Text(
-                text = title,
-                color = Color(0xFF17221B),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
+                Text(
+                    text = title,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(Color.White.copy(alpha = 0.88f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = accentColor,
+                    )
+                }
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.kasirkoperasi.app.core.navigation.AppRoute
+import com.kasirkoperasi.app.core.pdf.ProductBarcodeSheetPdfExporter
 import com.kasirkoperasi.app.di.AppContainer
 import com.kasirkoperasi.app.feature.history.screen.TransactionHistoryScreen
 import com.kasirkoperasi.app.feature.history.viewmodel.TransactionHistoryViewModel
@@ -114,15 +116,71 @@ class MainActivity : ComponentActivity() {
 
                 GmsBarcodeScanning.getClient(context, options)
             }
-            var selectedRoute by rememberSaveable { mutableStateOf(AppRoute.Home.route) }
+            var routeBackStack by rememberSaveable { mutableStateOf(listOf(AppRoute.Home.route)) }
+            val selectedRoute = routeBackStack.lastOrNull() ?: AppRoute.Home.route
+            var lastBackPressedAt by remember { mutableStateOf(0L) }
             val productUiState by productViewModel.uiState.collectAsState()
             val settingsUiState by settingsViewModel.uiState.collectAsState()
+            val productBarcodeSheetPdfExporter = remember(context) {
+                ProductBarcodeSheetPdfExporter(context)
+            }
+            val navigateTo: (String) -> Unit = { route ->
+                if (route != selectedRoute) {
+                    val previousRoute = routeBackStack.dropLast(1).lastOrNull()
+                    routeBackStack = when {
+                        route == AppRoute.Home.route -> listOf(AppRoute.Home.route)
+                        route == previousRoute -> routeBackStack.dropLast(1)
+                        else -> routeBackStack + route
+                    }
+                }
+            }
+            val navigateBack: () -> Unit = {
+                routeBackStack = if (routeBackStack.size > 1) {
+                    routeBackStack.dropLast(1)
+                } else {
+                    listOf(AppRoute.Home.route)
+                }
+            }
+
+            LaunchedEffect(selectedRoute) {
+                lastBackPressedAt = 0L
+            }
+
+            BackHandler {
+                if (selectedRoute == AppRoute.History.route) {
+                    navigateBack()
+                    return@BackHandler
+                }
+
+                val now = System.currentTimeMillis()
+                if (now - lastBackPressedAt <= EXIT_CONFIRMATION_WINDOW_MS) {
+                    finish()
+                } else {
+                    lastBackPressedAt = now
+                    Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+                }
+            }
 
             LaunchedEffect(settingsUiState.importCompletedSignal) {
                 if (settingsUiState.importCompletedSignal > 0) {
                     productViewModel.loadProducts()
                     reportViewModel.loadTodaySummary()
                 }
+            }
+
+            val generateProductBarcodeSheet = {
+                runCatching {
+                    productBarcodeSheetPdfExporter.export(productUiState.products)
+                }.onSuccess { uri ->
+                    sharePdf(uri)
+                }.onFailure { throwable ->
+                    Toast.makeText(
+                        context,
+                        throwable.message ?: "Gagal membuat PDF barcode produk",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                Unit
             }
 
             val startHomeBarcodeScan = {
@@ -134,7 +192,7 @@ class MainActivity : ComponentActivity() {
                                 rawBarcode = scannedValue,
                                 products = productUiState.products,
                             )
-                            selectedRoute = AppRoute.Transaction.route
+                            navigateTo(AppRoute.Transaction.route)
                         } else {
                             Toast.makeText(context, "Barcode tidak terbaca", Toast.LENGTH_SHORT).show()
                         }
@@ -163,7 +221,7 @@ class MainActivity : ComponentActivity() {
                             uiState = productUiState,
                             reportSummary = reportUiState.summary,
                             selectedRoute = selectedRoute,
-                            onRouteSelected = { selectedRoute = it },
+                            onRouteSelected = navigateTo,
                             onScanBarcode = startHomeBarcodeScan,
                             storeName = settingsUiState.storeName,
                             storeLogoUri = settingsUiState.logoUri,
@@ -180,7 +238,7 @@ class MainActivity : ComponentActivity() {
                             onClearMessage = productViewModel::clearMessage,
                             onImageDeletionHandled = productViewModel::clearImageDeletionRequest,
                             selectedRoute = selectedRoute,
-                            onRouteSelected = { selectedRoute = it },
+                            onRouteSelected = navigateTo,
                             storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -193,7 +251,7 @@ class MainActivity : ComponentActivity() {
                             products = productUiState.products,
                             uiState = transactionUiState,
                             selectedRoute = selectedRoute,
-                            onRouteSelected = { selectedRoute = it },
+                            onRouteSelected = navigateTo,
                             onSearchChange = transactionViewModel::updateSearchQuery,
                             onAddProduct = transactionViewModel::addProduct,
                             onBarcodeScanned = { scannedValue ->
@@ -235,8 +293,8 @@ class MainActivity : ComponentActivity() {
                         ReportScreen(
                             uiState = reportUiState,
                             selectedRoute = selectedRoute,
-                            onRouteSelected = { selectedRoute = it },
-                            onOpenHistory = { selectedRoute = AppRoute.History.route },
+                            onRouteSelected = navigateTo,
+                            onOpenHistory = { navigateTo(AppRoute.History.route) },
                             onRefresh = reportViewModel::loadTodaySummary,
                             onExportPdf = reportViewModel::exportReportPdf,
                             storeLogoUri = settingsUiState.logoUri,
@@ -248,15 +306,17 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             uiState = settingsUiState,
                             selectedRoute = selectedRoute,
-                            onRouteSelected = { selectedRoute = it },
+                            onRouteSelected = navigateTo,
                             onSaveStoreName = settingsViewModel::saveStoreName,
                             onLogoSelected = settingsViewModel::saveLogo,
                             onImportCsvSelected = settingsViewModel::importProductsCsv,
+                            onGenerateBarcodeSheet = generateProductBarcodeSheet,
                             onLoadPrinters = settingsViewModel::loadPairedPrinters,
                             onPrinterSelected = settingsViewModel::selectPrinter,
                             onTestPrinter = settingsViewModel::testPrintSelectedPrinter,
                             onPrinterPermissionDenied = settingsViewModel::onPrinterPermissionDenied,
                             onClearMessage = settingsViewModel::clearMessage,
+                            canGenerateBarcodeSheet = productUiState.products.any { !it.barcode.isNullOrBlank() },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -279,10 +339,10 @@ class MainActivity : ComponentActivity() {
                             onRefresh = { transactionHistoryViewModel.loadTransactions() },
                             onTransactionSelected = transactionHistoryViewModel::openTransactionDetail,
                             onDismissDetail = transactionHistoryViewModel::dismissTransactionDetail,
-                            onRouteSelected = { selectedRoute = it },
+                            onRouteSelected = navigateTo,
                             storeLogoUri = settingsUiState.logoUri,
                             productImageById = productImageById,
-                            onBackClick = { selectedRoute = AppRoute.Report.route },
+                            onBackClick = navigateBack,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -300,3 +360,5 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(intent, "Bagikan laporan PDF"))
     }
 }
+
+private const val EXIT_CONFIRMATION_WINDOW_MS = 2_000L

@@ -1,6 +1,7 @@
 package com.kasirkoperasi.app.feature.history.screen
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -104,6 +105,13 @@ fun TransactionHistoryScreen(
     productImageById: Map<Long, String?> = emptyMap(),
     onBackClick: (() -> Unit)? = null,
 ) {
+    BackHandler(enabled = onBackClick != null && uiState.selectedTransaction == null) {
+        onBackClick?.invoke()
+    }
+    BackHandler(enabled = uiState.selectedTransaction != null) {
+        onDismissDetail()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier
