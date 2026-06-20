@@ -32,6 +32,9 @@ import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModelFactory
 import com.kasirkoperasi.app.feature.report.screen.ReportScreen
 import com.kasirkoperasi.app.feature.report.viewmodel.ReportViewModel
 import com.kasirkoperasi.app.feature.report.viewmodel.ReportViewModelFactory
+import com.kasirkoperasi.app.feature.settings.screen.SettingsScreen
+import com.kasirkoperasi.app.feature.settings.viewmodel.SettingsViewModel
+import com.kasirkoperasi.app.feature.settings.viewmodel.SettingsViewModelFactory
 import com.kasirkoperasi.app.feature.transaction.screen.TransactionScreen
 import com.kasirkoperasi.app.feature.transaction.viewmodel.TransactionViewModel
 import com.kasirkoperasi.app.feature.transaction.viewmodel.TransactionViewModelFactory
@@ -77,6 +80,13 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModelFactory(
+            context = applicationContext,
+            importProductsCsvUseCase = appContainer.importProductsCsvUseCase,
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -105,12 +115,25 @@ class MainActivity : ComponentActivity() {
                 GmsBarcodeScanning.getClient(context, options)
             }
             var selectedRoute by rememberSaveable { mutableStateOf(AppRoute.Home.route) }
+            val productUiState by productViewModel.uiState.collectAsState()
+            val settingsUiState by settingsViewModel.uiState.collectAsState()
+
+            LaunchedEffect(settingsUiState.importCompletedSignal) {
+                if (settingsUiState.importCompletedSignal > 0) {
+                    productViewModel.loadProducts()
+                    reportViewModel.loadTodaySummary()
+                }
+            }
+
             val startHomeBarcodeScan = {
                 homeBarcodeScanner.startScan()
                     .addOnSuccessListener { barcode ->
                         val scannedValue = barcode.rawValue.orEmpty().trim()
                         if (scannedValue.isNotEmpty()) {
-                            transactionViewModel.updateSearchQuery(scannedValue)
+                            transactionViewModel.addProductByBarcode(
+                                rawBarcode = scannedValue,
+                                products = productUiState.products,
+                            )
                             selectedRoute = AppRoute.Transaction.route
                         } else {
                             Toast.makeText(context, "Barcode tidak terbaca", Toast.LENGTH_SHORT).show()
@@ -134,7 +157,6 @@ class MainActivity : ComponentActivity() {
             KasirKoperasiTheme {
                 when (selectedRoute) {
                     AppRoute.Home.route -> {
-                        val productUiState by productViewModel.uiState.collectAsState()
                         val reportUiState by reportViewModel.uiState.collectAsState()
 
                         HomeScreen(
@@ -143,13 +165,13 @@ class MainActivity : ComponentActivity() {
                             selectedRoute = selectedRoute,
                             onRouteSelected = { selectedRoute = it },
                             onScanBarcode = startHomeBarcodeScan,
+                            storeName = settingsUiState.storeName,
+                            storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
                     AppRoute.Product.route -> {
-                        val productUiState by productViewModel.uiState.collectAsState()
-
                         ProductScreen(
                             uiState = productUiState,
                             onSaveProduct = productViewModel::saveProduct,
@@ -159,12 +181,12 @@ class MainActivity : ComponentActivity() {
                             onImageDeletionHandled = productViewModel::clearImageDeletionRequest,
                             selectedRoute = selectedRoute,
                             onRouteSelected = { selectedRoute = it },
+                            storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
                     AppRoute.Transaction.route -> {
-                        val productUiState by productViewModel.uiState.collectAsState()
                         val transactionUiState by transactionViewModel.uiState.collectAsState()
 
                         TransactionScreen(
@@ -174,6 +196,12 @@ class MainActivity : ComponentActivity() {
                             onRouteSelected = { selectedRoute = it },
                             onSearchChange = transactionViewModel::updateSearchQuery,
                             onAddProduct = transactionViewModel::addProduct,
+                            onBarcodeScanned = { scannedValue ->
+                                transactionViewModel.addProductByBarcode(
+                                    rawBarcode = scannedValue,
+                                    products = productUiState.products,
+                                )
+                            },
                             onIncreaseQuantity = transactionViewModel::increaseQuantity,
                             onDecreaseQuantity = transactionViewModel::decreaseQuantity,
                             onRemoveItem = transactionViewModel::removeItem,
@@ -187,6 +215,9 @@ class MainActivity : ComponentActivity() {
                                 productViewModel.loadProducts()
                                 reportViewModel.loadTodaySummary()
                             },
+                            storeName = settingsUiState.storeName,
+                            printerName = settingsUiState.selectedPrinterName ?: "IDY01POS-58B",
+                            storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -208,6 +239,24 @@ class MainActivity : ComponentActivity() {
                             onOpenHistory = { selectedRoute = AppRoute.History.route },
                             onRefresh = reportViewModel::loadTodaySummary,
                             onExportPdf = reportViewModel::exportReportPdf,
+                            storeLogoUri = settingsUiState.logoUri,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    AppRoute.Settings.route -> {
+                        SettingsScreen(
+                            uiState = settingsUiState,
+                            selectedRoute = selectedRoute,
+                            onRouteSelected = { selectedRoute = it },
+                            onSaveStoreName = settingsViewModel::saveStoreName,
+                            onLogoSelected = settingsViewModel::saveLogo,
+                            onImportCsvSelected = settingsViewModel::importProductsCsv,
+                            onLoadPrinters = settingsViewModel::loadPairedPrinters,
+                            onPrinterSelected = settingsViewModel::selectPrinter,
+                            onTestPrinter = settingsViewModel::testPrintSelectedPrinter,
+                            onPrinterPermissionDenied = settingsViewModel::onPrinterPermissionDenied,
+                            onClearMessage = settingsViewModel::clearMessage,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -226,6 +275,8 @@ class MainActivity : ComponentActivity() {
                             onTransactionSelected = transactionHistoryViewModel::openTransactionDetail,
                             onDismissDetail = transactionHistoryViewModel::dismissTransactionDetail,
                             onRouteSelected = { selectedRoute = it },
+                            storeLogoUri = settingsUiState.logoUri,
+                            onBackClick = { selectedRoute = AppRoute.Report.route },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
