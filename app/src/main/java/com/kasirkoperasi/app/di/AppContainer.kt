@@ -16,6 +16,7 @@ import com.kasirkoperasi.app.domain.usecase.GetProductsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionItemsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSimpleReportUseCase
+import com.kasirkoperasi.app.domain.usecase.ImportProductsCsvUseCase
 import com.kasirkoperasi.app.domain.usecase.SaveProductUseCase
 import com.kasirkoperasi.app.domain.usecase.UpdateProductWithStockInUseCase
 
@@ -42,6 +43,7 @@ class AppContainer(context: Context) {
 
     val getProductsUseCase = GetProductsUseCase(productRepository)
     val saveProductUseCase = SaveProductUseCase(productRepository)
+    val importProductsCsvUseCase = ImportProductsCsvUseCase(productRepository)
     val updateProductWithStockInUseCase = UpdateProductWithStockInUseCase(productRepository)
     val deactivateProductUseCase = DeactivateProductUseCase(productRepository)
     val completeSalesTransactionUseCase = CompleteSalesTransactionUseCase(salesTransactionRepository)

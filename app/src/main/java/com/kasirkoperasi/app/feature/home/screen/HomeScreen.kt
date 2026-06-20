@@ -83,6 +83,8 @@ fun HomeScreen(
     selectedRoute: String,
     onRouteSelected: (String) -> Unit,
     onScanBarcode: () -> Unit = {},
+    storeName: String = "KasirKoperasi",
+    storeLogoUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val products = uiState.products
@@ -107,7 +109,10 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize(),
         containerColor = CreamBackground,
         topBar = {
-            HomeTopBar()
+            HomeTopBar(
+                storeName = storeName,
+                storeLogoUri = storeLogoUri,
+            )
         },
         bottomBar = {
             KasirBottomBar(
@@ -195,7 +200,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeTopBar() {
+private fun HomeTopBar(
+    storeName: String,
+    storeLogoUri: String?,
+) {
     Surface(
         color = CreamBackground,
         shadowElevation = 2.dp,
@@ -212,10 +220,13 @@ private fun HomeTopBar() {
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                KoperasiLogo()
+                KoperasiLogo(
+                    logoUri = storeLogoUri,
+                    fallbackText = storeName.firstOrNull()?.uppercaseChar()?.toString() ?: "K",
+                )
 
                 Text(
-                    text = "KasirKoperasi",
+                    text = storeName,
                     modifier = Modifier.weight(1f),
                     color = DeepGreen,
                     style = MaterialTheme.typography.titleLarge,
@@ -656,7 +667,7 @@ private fun MenuGrid(
             MenuCard(
                 title = "Setting",
                 icon = Icons.Outlined.Settings,
-                onClick = { },
+                onClick = { onRouteSelected(AppRoute.Settings.route) },
                 modifier = Modifier.weight(1f),
             )
         }

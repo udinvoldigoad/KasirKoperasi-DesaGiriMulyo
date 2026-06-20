@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.kasirkoperasi.app.core.settings.StoreProfileStore
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import java.io.File
@@ -30,7 +31,10 @@ class TransactionReportPdfExporter(
         require(data.transactions.isNotEmpty()) { "Tidak ada transaksi untuk diexport" }
 
         val document = PdfDocument()
-        val renderer = PdfRenderer(document)
+        val renderer = PdfRenderer(
+            document = document,
+            storeName = StoreProfileStore.load(context).storeName,
+        )
         renderer.render(data)
 
         val directory = File(context.cacheDir, REPORT_DIRECTORY).apply {
@@ -58,6 +62,7 @@ class TransactionReportPdfExporter(
 
 private class PdfRenderer(
     private val document: PdfDocument,
+    private val storeName: String,
 ) {
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(7, 84, 54)
@@ -144,7 +149,7 @@ private class PdfRenderer(
     }
 
     private fun drawReportHeader(data: TransactionReportPdfData) {
-        canvas.drawText("KasirKoperasi", MARGIN_LEFT, y, titlePaint)
+        canvas.drawText(storeName, MARGIN_LEFT, y, titlePaint)
         y += 16f
         canvas.drawText("Laporan Rincian Transaksi", MARGIN_LEFT, y, sectionPaint)
         y += 14f
@@ -260,7 +265,7 @@ private class PdfRenderer(
     private fun drawFooter() {
         val footerY = PAGE_HEIGHT - 20f
         canvas.drawLine(MARGIN_LEFT, footerY - 12f, PAGE_WIDTH - MARGIN_RIGHT, footerY - 12f, linePaint)
-        canvas.drawText("KasirKoperasi - Pembukuan Transaksi", MARGIN_LEFT, footerY, subtitlePaint)
+        canvas.drawText("$storeName - Pembukuan Transaksi", MARGIN_LEFT, footerY, subtitlePaint)
         canvas.drawText("Halaman $pageNumber", PAGE_WIDTH - MARGIN_RIGHT - 55f, footerY, subtitlePaint)
     }
 

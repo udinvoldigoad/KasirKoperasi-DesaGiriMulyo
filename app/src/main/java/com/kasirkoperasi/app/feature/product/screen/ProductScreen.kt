@@ -123,6 +123,7 @@ fun ProductScreen(
     modifier: Modifier = Modifier,
     selectedRoute: String = AppRoute.Product.route,
     onRouteSelected: (String) -> Unit = {},
+    storeLogoUri: String? = null,
 ) {
     var isAddingProduct by rememberSaveable { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
@@ -158,6 +159,7 @@ fun ProductScreen(
         ProductListScreen(
             uiState = uiState,
             selectedRoute = selectedRoute,
+            storeLogoUri = storeLogoUri,
             onAddClick = {
                 isAddingProduct = true
                 onClearMessage()
@@ -192,6 +194,7 @@ fun ProductScreen(
 private fun ProductListScreen(
     uiState: ProductUiState,
     selectedRoute: String,
+    storeLogoUri: String?,
     onAddClick: () -> Unit,
     onProductClick: (Product) -> Unit,
     onClearMessage: () -> Unit,
@@ -228,7 +231,7 @@ private fun ProductListScreen(
             topBar = {
                 ProductTopBar(
                     title = "Barang",
-                    leftContent = { KoperasiLogo() },
+                    leftContent = { KoperasiLogo(logoUri = storeLogoUri) },
                     rightContent = null,
                 )
             },

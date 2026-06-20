@@ -81,6 +81,7 @@ fun ReportScreen(
     onRefresh: () -> Unit,
     onExportPdf: (ReportExportRange) -> Unit,
     modifier: Modifier = Modifier,
+    storeLogoUri: String? = null,
 ) {
     var isExportRangePanelVisible by remember { mutableStateOf(false) }
 
@@ -89,7 +90,10 @@ fun ReportScreen(
             modifier = Modifier.fillMaxSize(),
             containerColor = CreamBackground,
             topBar = {
-                ReportTopBar(onRefresh = onRefresh)
+                ReportTopBar(
+                    logoUri = storeLogoUri,
+                    onRefresh = onRefresh,
+                )
             },
             bottomBar = {
                 KasirBottomBar(
@@ -172,6 +176,7 @@ fun ReportScreen(
 
 @Composable
 private fun ReportTopBar(
+    logoUri: String?,
     onRefresh: () -> Unit,
 ) {
     Surface(
@@ -186,7 +191,7 @@ private fun ReportTopBar(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            KoperasiLogo()
+            KoperasiLogo(logoUri = logoUri)
 
             Text(
                 text = "Laporan",
