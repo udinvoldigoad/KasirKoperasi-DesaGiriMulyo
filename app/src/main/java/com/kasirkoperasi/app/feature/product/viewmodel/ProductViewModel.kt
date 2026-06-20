@@ -82,9 +82,16 @@ class ProductViewModel(
 
         val normalizedCategory = ProductCategory.normalize(category)
         val cleanUnit = unit.trim().ifEmpty { "pcs" }
+        val cleanBarcodeInput = barcode.trim()
+        val normalizedBarcode = cleanBarcodeInput.toFourDigitBarcodeOrNull()
         val parsedPurchasePrice = purchasePrice.onlyDigits().toLongOrNull() ?: 0L
         val parsedSellingPrice = sellingPrice.onlyDigits().toLongOrNull() ?: 0L
         val parsedStockQuantity = stockQuantity.onlyDigits().toIntOrNull() ?: 0
+
+        if (cleanBarcodeInput.isNotBlank() && normalizedBarcode == null) {
+            _uiState.update { it.copy(errorMessage = "Barcode harus angka maksimal 4 digit") }
+            return
+        }
 
         if (parsedSellingPrice <= 0L) {
             _uiState.update { it.copy(errorMessage = "Harga jual wajib lebih dari 0") }
@@ -109,7 +116,7 @@ class ProductViewModel(
             val product = Product(
                 name = cleanName,
                 category = normalizedCategory,
-                barcode = barcode.trim().ifEmpty { null },
+                barcode = normalizedBarcode,
                 unit = cleanUnit,
                 purchasePrice = parsedPurchasePrice,
                 sellingPrice = parsedSellingPrice,
@@ -284,5 +291,14 @@ class ProductViewModel(
 
     private fun String.hasNegativeSign(): Boolean {
         return trim().startsWith("-")
+    }
+
+    private fun String.toFourDigitBarcodeOrNull(): String? {
+        val rawCode = trim()
+        if (rawCode.isBlank()) return null
+        if (!rawCode.all { it.isDigit() }) return null
+        if (rawCode.length > 4) return null
+
+        return rawCode.padStart(4, '0')
     }
 }

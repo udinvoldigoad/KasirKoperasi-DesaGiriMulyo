@@ -65,6 +65,40 @@ class TransactionViewModel(
         }
     }
 
+    fun addProductByBarcode(rawBarcode: String, products: List<Product>) {
+        val barcode = rawBarcode.toFourDigitBarcodeOrNull()
+        if (barcode == null) {
+            _uiState.update {
+                it.copy(
+                    searchQuery = "",
+                    errorMessage = "Barcode tidak valid. Gunakan kode 4 angka.",
+                    successMessage = null,
+                )
+            }
+            return
+        }
+
+        val matchedProduct = products.firstOrNull { product ->
+            product.barcode.toFourDigitBarcodeOrNull() == barcode
+        }
+
+        if (matchedProduct == null) {
+            _uiState.update {
+                it.copy(
+                    searchQuery = barcode,
+                    errorMessage = "Barang dengan barcode $barcode belum terdaftar",
+                    successMessage = null,
+                )
+            }
+            return
+        }
+
+        addProduct(matchedProduct)
+        _uiState.update {
+            it.copy(searchQuery = "")
+        }
+    }
+
     fun increaseQuantity(productId: Long) {
         val currentState = _uiState.value
         val selectedItem = currentState.cartItems.firstOrNull { it.product.id == productId } ?: return
@@ -203,6 +237,17 @@ class TransactionViewModel(
                     ),
                 )
             }.onSuccess {
+                val completedPaidAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Qris) {
+                    currentState.totalAmount
+                } else {
+                    currentState.paidAmount
+                }
+                val completedChangeAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Cash) {
+                    (completedPaidAmount - currentState.totalAmount).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+
                 _uiState.update {
                     it.copy(
                         cartItems = emptyList(),
@@ -212,6 +257,10 @@ class TransactionViewModel(
                         isSaving = false,
                         completedItems = currentCart,
                         completedTotalAmount = currentState.totalAmount,
+                        completedBuyerName = currentState.buyerName.trim(),
+                        completedPaymentMethod = currentState.selectedPaymentMethod.label,
+                        completedPaidAmount = completedPaidAmount,
+                        completedChangeAmount = completedChangeAmount,
                         successMessage = "Transaksi berhasil disimpan",
                     )
                 }
@@ -232,6 +281,10 @@ class TransactionViewModel(
                 errorMessage = null,
                 completedItems = emptyList(),
                 completedTotalAmount = 0L,
+                completedBuyerName = "",
+                completedPaymentMethod = PaymentMethod.Cash.label,
+                completedPaidAmount = 0L,
+                completedChangeAmount = 0L,
                 successMessage = null,
             )
         }
@@ -245,5 +298,14 @@ class TransactionViewModel(
             .chunked(3)
             .joinToString(".")
             .reversed()
+    }
+
+    private fun String?.toFourDigitBarcodeOrNull(): String? {
+        val rawCode = this?.trim().orEmpty()
+        if (rawCode.isBlank()) return null
+        if (!rawCode.all { it.isDigit() }) return null
+        if (rawCode.length > 4) return null
+
+        return rawCode.padStart(4, '0')
     }
 }
