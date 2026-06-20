@@ -11,6 +11,10 @@ data class TransactionUiState(
     val isSaving: Boolean = false,
     val completedItems: List<CartItem> = emptyList(),
     val completedTotalAmount: Long = 0L,
+    val completedBuyerName: String = "",
+    val completedPaymentMethod: String = PaymentMethod.Cash.label,
+    val completedPaidAmount: Long = 0L,
+    val completedChangeAmount: Long = 0L,
     val errorMessage: String? = null,
     val successMessage: String? = null,
 ) {

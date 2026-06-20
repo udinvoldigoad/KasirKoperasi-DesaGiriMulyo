@@ -1,6 +1,11 @@
 package com.kasirkoperasi.app.feature.transaction.screen
 
+import android.Manifest
 import android.graphics.Bitmap
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -58,6 +63,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +79,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.kasirkoperasi.app.core.common.AppResult
 import com.kasirkoperasi.app.core.image.ProductImageStore
+import com.kasirkoperasi.app.core.printer.BluetoothEscPosPrinter
+import com.kasirkoperasi.app.core.printer.ReceiptPrintData
+import com.kasirkoperasi.app.core.printer.ReceiptPrintItem
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
 import com.kasirkoperasi.app.domain.model.Product
@@ -90,6 +101,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlinx.coroutines.launch
 
 @Composable
 fun TransactionScreen(
@@ -99,6 +111,7 @@ fun TransactionScreen(
     onRouteSelected: (String) -> Unit,
     onSearchChange: (String) -> Unit,
     onAddProduct: (Product) -> Unit,
+    onBarcodeScanned: (String) -> Unit,
     onIncreaseQuantity: (Long) -> Unit,
     onDecreaseQuantity: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -110,11 +123,51 @@ fun TransactionScreen(
     onClearMessage: () -> Unit,
     onTransactionSaved: () -> Unit,
     modifier: Modifier = Modifier,
+    storeName: String = "KasirKoperasi",
+    printerName: String = THERMAL_PRINTER_NAME,
+    storeLogoUri: String? = null,
 ) {
     var activeSheet by remember { mutableStateOf<TransactionSheet?>(null) }
     var isSuccessDialogVisible by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
+    var printMessage by remember { mutableStateOf<String?>(null) }
+    var printErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isPrintingReceipt by remember { mutableStateOf(false) }
+    var pendingPrintData by remember { mutableStateOf<ReceiptPrintData?>(null) }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val printer = remember(context) { BluetoothEscPosPrinter(context) }
+    val runPrintReceipt: (ReceiptPrintData) -> Unit = { receiptData ->
+        coroutineScope.launch {
+            isPrintingReceipt = true
+            printMessage = null
+            printErrorMessage = null
+
+            when (val result = printer.printReceipt(receiptData)) {
+                is AppResult.Success -> {
+                    printMessage = "Struk berhasil dikirim ke printer"
+                }
+
+                is AppResult.Error -> {
+                    printErrorMessage = result.message
+                }
+            }
+
+            isPrintingReceipt = false
+        }
+    }
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { isGranted ->
+        val receiptData = pendingPrintData
+        pendingPrintData = null
+
+        if (isGranted && receiptData != null) {
+            runPrintReceipt(receiptData)
+        } else {
+            printErrorMessage = "Izin Bluetooth diperlukan untuk mencetak struk"
+        }
+    }
     val barcodeScanner = remember(context) {
         val options = GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(
@@ -147,6 +200,8 @@ fun TransactionScreen(
         if (uiState.successMessage != null) {
             activeSheet = null
             isSuccessDialogVisible = true
+            printMessage = null
+            printErrorMessage = null
             onTransactionSaved()
         }
     }
@@ -171,8 +226,7 @@ fun TransactionScreen(
             .addOnSuccessListener { barcode ->
                 val scannedValue = barcode.rawValue.orEmpty().trim()
                 if (scannedValue.isNotEmpty()) {
-                    onSearchChange(scannedValue)
-                    onClearMessage()
+                    onBarcodeScanned(scannedValue)
                 } else {
                     scanErrorMessage = "Barcode tidak terbaca"
                 }
@@ -195,7 +249,7 @@ fun TransactionScreen(
                 modifier = Modifier.fillMaxSize(),
                 containerColor = CreamBackground,
                 topBar = {
-                    TransactionTopBar()
+                    TransactionTopBar(logoUri = storeLogoUri)
                 },
                 bottomBar = {
                     KasirBottomBar(
@@ -330,8 +384,31 @@ fun TransactionScreen(
 
         if (shouldShowSuccessDialog) {
             TransactionSuccessDialog(
+                storeName = storeName,
                 items = uiState.completedItems,
+                buyerName = uiState.completedBuyerName,
+                paymentMethod = uiState.completedPaymentMethod,
+                paidAmount = uiState.completedPaidAmount,
+                changeAmount = uiState.completedChangeAmount,
                 totalAmount = uiState.completedTotalAmount,
+                isPrinting = isPrintingReceipt,
+                printMessage = printMessage,
+                printErrorMessage = printErrorMessage,
+                printerName = printerName,
+                onPrint = {
+                    val receiptData = uiState.toReceiptPrintData(storeName)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        pendingPrintData = receiptData
+                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    } else {
+                        runPrintReceipt(receiptData)
+                    }
+                },
                 onDismiss = {
                     isSuccessDialogVisible = false
                     onClearMessage()
@@ -348,8 +425,18 @@ private enum class TransactionSheet {
 
 @Composable
 private fun TransactionSuccessDialog(
+    storeName: String,
     items: List<CartItem>,
+    buyerName: String,
+    paymentMethod: String,
+    paidAmount: Long,
+    changeAmount: Long,
     totalAmount: Long,
+    isPrinting: Boolean,
+    printMessage: String?,
+    printErrorMessage: String?,
+    printerName: String,
+    onPrint: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Box(
@@ -398,7 +485,7 @@ private fun TransactionSuccessDialog(
                 )
 
                 Text(
-                    text = "Data penjualan sudah tersimpan. Struk bisa dicetak setelah fitur printer diaktifkan.",
+                    text = "Data penjualan sudah tersimpan. Cetak struk ke printer $printerName.",
                     color = MutedText,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
@@ -406,8 +493,26 @@ private fun TransactionSuccessDialog(
 
                 TransactionSuccessDetail(
                     items = items,
+                    buyerName = buyerName,
+                    paymentMethod = paymentMethod,
+                    paidAmount = paidAmount,
+                    changeAmount = changeAmount,
                     totalAmount = totalAmount,
                 )
+
+                printMessage?.let { message ->
+                    PrintStatusMessage(
+                        message = message,
+                        isError = false,
+                    )
+                }
+
+                printErrorMessage?.let { message ->
+                    PrintStatusMessage(
+                        message = message,
+                        isError = true,
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -427,19 +532,21 @@ private fun TransactionSuccessDialog(
                     }
 
                     Button(
-                        onClick = {},
-                        enabled = false,
+                        onClick = onPrint,
+                        enabled = !isPrinting,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
                         colors = ButtonDefaults.buttonColors(
+                            containerColor = DeepGreen,
+                            contentColor = Color.White,
                             disabledContainerColor = SoftGray,
                             disabledContentColor = MutedText,
                         ),
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Text(
-                            text = "Print",
+                            text = if (isPrinting) "Mencetak..." else "Print",
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -452,6 +559,10 @@ private fun TransactionSuccessDialog(
 @Composable
 private fun TransactionSuccessDetail(
     items: List<CartItem>,
+    buyerName: String,
+    paymentMethod: String,
+    paidAmount: Long,
+    changeAmount: Long,
     totalAmount: Long,
 ) {
     Surface(
@@ -491,6 +602,18 @@ private fun TransactionSuccessDetail(
                     .background(LineSoft),
             )
 
+            if (buyerName.isNotBlank()) {
+                SuccessSummaryRow(
+                    label = "Pembeli",
+                    value = buyerName,
+                )
+            }
+
+            SuccessSummaryRow(
+                label = "Pembayaran",
+                value = paymentMethod,
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -511,7 +634,65 @@ private fun TransactionSuccessDetail(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+
+            SuccessSummaryRow(
+                label = "Dibayar",
+                value = paidAmount.toRupiah(),
+            )
+
+            SuccessSummaryRow(
+                label = "Kembalian",
+                value = changeAmount.toRupiah(),
+            )
         }
+    }
+}
+
+@Composable
+private fun SuccessSummaryRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = value,
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun PrintStatusMessage(
+    message: String,
+    isError: Boolean,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isError) MaterialTheme.colorScheme.errorContainer else FreshMint,
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            color = if (isError) MaterialTheme.colorScheme.onErrorContainer else DeepGreen,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -1032,7 +1213,9 @@ private fun ChangeInfoCard(
 }
 
 @Composable
-private fun TransactionTopBar() {
+private fun TransactionTopBar(
+    logoUri: String?,
+) {
     Surface(
         color = CreamBackground,
         shadowElevation = 2.dp,
@@ -1045,7 +1228,7 @@ private fun TransactionTopBar() {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            KoperasiLogo()
+            KoperasiLogo(logoUri = logoUri)
             Text(
                 text = "Transaksi",
                 modifier = Modifier.weight(1f),
@@ -1444,3 +1627,25 @@ private fun Long.toRupiah(): String {
 
     return "Rp$grouped"
 }
+
+private fun TransactionUiState.toReceiptPrintData(storeName: String): ReceiptPrintData {
+    return ReceiptPrintData(
+        storeName = storeName,
+        buyerName = completedBuyerName,
+        paymentMethod = completedPaymentMethod,
+        paidAmount = completedPaidAmount,
+        changeAmount = completedChangeAmount,
+        totalAmount = completedTotalAmount,
+        items = completedItems.map { item ->
+            ReceiptPrintItem(
+                name = item.product.name,
+                quantity = item.quantity,
+                unit = item.product.unit,
+                sellingPrice = item.product.sellingPrice,
+                subtotal = item.subtotal,
+            )
+        },
+    )
+}
+
+private const val THERMAL_PRINTER_NAME = "IDY01POS-58B"
