@@ -50,6 +50,7 @@ class AppContainer(context: Context) {
     val getSalesTransactionItemsUseCase = GetSalesTransactionItemsUseCase(salesTransactionRepository)
     val exportTransactionReportPdfUseCase = ExportTransactionReportPdfUseCase(
         getSalesTransactionItemsUseCase = getSalesTransactionItemsUseCase,
+        getProductsUseCase = getProductsUseCase,
         transactionReportPdfExporter = transactionReportPdfExporter,
     )
     val getSalesTransactionsUseCase = GetSalesTransactionsUseCase(salesTransactionRepository)

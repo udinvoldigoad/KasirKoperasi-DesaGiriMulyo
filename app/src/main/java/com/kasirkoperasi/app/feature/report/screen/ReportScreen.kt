@@ -1,5 +1,14 @@
 package com.kasirkoperasi.app.feature.report.screen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,10 +43,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -50,8 +57,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
 import com.kasirkoperasi.app.domain.model.ReportSummary
+import com.kasirkoperasi.app.feature.report.state.ReportDailySalesPoint
 import com.kasirkoperasi.app.feature.report.state.ReportExportRange
 import com.kasirkoperasi.app.feature.report.state.ReportUiState
 import com.kasirkoperasi.app.ui.theme.CreamBackground
@@ -84,14 +94,18 @@ fun ReportScreen(
     storeLogoUri: String? = null,
 ) {
     var isExportRangePanelVisible by remember { mutableStateOf(false) }
+    val isShowingLoadingModal = uiState.isLoading || uiState.isExporting
 
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(if (isShowingLoadingModal) 2.dp else 0.dp),
             containerColor = CreamBackground,
             topBar = {
                 ReportTopBar(
                     logoUri = storeLogoUri,
+                    isRefreshing = uiState.isLoading,
                     onRefresh = onRefresh,
                 )
             },
@@ -114,16 +128,6 @@ fun ReportScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                if (uiState.isLoading || uiState.isExporting) {
-                    item {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = DeepGreen,
-                            trackColor = SoftGray,
-                        )
-                    }
-                }
-
                 uiState.errorMessage?.let { message ->
                     item {
                         ReportMessageCard(message = message)
@@ -137,11 +141,11 @@ fun ReportScreen(
                 }
 
                 item {
-                    ReportHeroCard(summary = uiState.summary)
+                    ReportMetricGrid(summary = uiState.monthlySummary)
                 }
 
                 item {
-                    ReportMetricGrid(summary = uiState.summary)
+                    SevenDaySalesChartCard(points = uiState.sevenDaySales)
                 }
 
                 item {
@@ -155,10 +159,6 @@ fun ReportScreen(
                 item {
                     HistoryShortcutCard(onClick = onOpenHistory)
                 }
-
-                item {
-                    ReportNoteCard()
-                }
             }
         }
 
@@ -171,14 +171,36 @@ fun ReportScreen(
                 },
             )
         }
+
+        if (isShowingLoadingModal) {
+            ModernLoadingModal(
+                title = if (uiState.isExporting) "Membuat PDF pembukuan" else "Memperbarui laporan",
+                caption = if (uiState.isExporting) {
+                    "Tunggu sebentar, dokumen sedang disiapkan."
+                } else {
+                    "Data penjualan, profit, dan grafik sedang dihitung ulang."
+                },
+            )
+        }
     }
 }
 
 @Composable
 private fun ReportTopBar(
     logoUri: String?,
+    isRefreshing: Boolean,
     onRefresh: () -> Unit,
 ) {
+    val refreshRotation by rememberInfiniteTransition(label = "report-refresh-icon")
+        .animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 850, easing = LinearEasing),
+            ),
+            label = "report-refresh-rotation",
+        )
+
     Surface(
         color = CreamBackground,
         shadowElevation = 2.dp,
@@ -204,13 +226,23 @@ private fun ReportTopBar(
 
             IconButton(
                 onClick = onRefresh,
-                modifier = Modifier.size(40.dp),
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        color = if (isRefreshing) FreshMint else Color.Transparent,
+                        shape = CircleShape,
+                    ),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Refresh,
                     contentDescription = "Muat ulang laporan",
-                    modifier = Modifier.size(24.dp),
-                    tint = Color(0xFF303A34),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .graphicsLayer {
+                            rotationZ = if (isRefreshing) refreshRotation else 0f
+                        },
+                    tint = if (isRefreshing) DeepGreen else Color(0xFF303A34),
                 )
             }
         }
@@ -218,98 +250,96 @@ private fun ReportTopBar(
 }
 
 @Composable
-private fun ReportHeroCard(
-    summary: ReportSummary,
+private fun ModernLoadingModal(
+    title: String,
+    caption: String,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = DeepGreen),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 120)),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(174.dp),
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable(enabled = false) { },
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 14.dp, end = 14.dp)
-                    .size(96.dp)
-                    .background(Color.White.copy(alpha = 0.12f), CircleShape),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 82.dp, bottom = 22.dp)
-                    .size(48.dp)
-                    .background(Color.White.copy(alpha = 0.08f), CircleShape),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 20.dp, bottom = 16.dp)
-                    .size(36.dp)
-                    .background(Color.White.copy(alpha = 0.09f), CircleShape),
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+                    .fillMaxWidth()
+                    .padding(horizontal = 34.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = Color.White,
+                shadowElevation = 16.dp,
+                border = BorderStroke(1.dp, FreshMint),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
+                Column(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Laporan Hari Ini",
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "${summary.soldItemCount} barang terjual",
-                            color = Color.White.copy(alpha = 0.78f),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .background(Color.White.copy(alpha = 0.20f), CircleShape),
+                            .size(62.dp)
+                            .background(FreshMint, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.BarChart,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.White,
-                        )
+                        LoadingDots()
                     }
-                }
 
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Total Penjualan",
-                        color = Color.White.copy(alpha = 0.78f),
-                        style = MaterialTheme.typography.labelLarge,
+                        text = title,
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = summary.totalSales.toRupiah(),
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        text = caption,
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LoadingDots() {
+    val phase by rememberInfiniteTransition(label = "report-refresh-dots")
+        .animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "report-refresh-dot-phase",
+        )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(3) { index ->
+            val wave = ((phase + index * 0.22f) % 1f).let { value ->
+                if (value <= 0.5f) value * 2f else (1f - value) * 2f
+            }
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .graphicsLayer {
+                        alpha = 0.42f + (wave * 0.58f)
+                        scaleX = 0.72f + (wave * 0.32f)
+                        scaleY = 0.72f + (wave * 0.32f)
+                    }
+                    .background(DeepGreen, CircleShape),
+            )
         }
     }
 }
@@ -324,18 +354,18 @@ private fun ReportMetricGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ReportMetricCard(
-                title = "Profit",
-                value = summary.totalProfit.toRupiah(),
-                caption = "Keuntungan hari ini",
-                icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                title = "Penjualan Bulan Ini",
+                value = summary.totalSales.toRupiah(),
+                caption = "Total transaksi",
+                icon = Icons.Outlined.BarChart,
                 iconBackground = FreshMint,
                 modifier = Modifier.weight(1f),
             )
             ReportMetricCard(
-                title = "Margin",
-                value = summary.marginPercent(),
-                caption = "Profit dari penjualan",
-                icon = Icons.Outlined.BarChart,
+                title = "Profit Bulan Ini",
+                value = summary.totalProfit.toRupiah(),
+                caption = "Keuntungan bersih",
+                icon = Icons.AutoMirrored.Outlined.TrendingUp,
                 iconBackground = SoftGray,
                 modifier = Modifier.weight(1f),
             )
@@ -362,6 +392,144 @@ private fun ReportMetricGrid(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+@Composable
+private fun SevenDaySalesChartCard(
+    points: List<ReportDailySalesPoint>,
+) {
+    val maxSales = points.maxOfOrNull { it.totalSales } ?: 0L
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = "Grafik Penjualan 7 Hari",
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Total penjualan harian dari transaksi tersimpan.",
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(FreshMint, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.BarChart,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = DeepGreen,
+                    )
+                }
+            }
+
+            if (points.isEmpty()) {
+                Text(
+                    text = "Belum ada data penjualan untuk ditampilkan.",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 18.dp),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(142.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    points.forEach { point ->
+                        SalesBar(
+                            point = point,
+                            maxSales = maxSales,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SalesBar(
+    point: ReportDailySalesPoint,
+    maxSales: Long,
+    modifier: Modifier = Modifier,
+) {
+    val barHeight = if (maxSales <= 0L) {
+        8f
+    } else {
+        maxOf(8f, (point.totalSales.toFloat() / maxSales.toFloat()) * 82f)
+    }
+    val barColor = if (point.totalSales > 0L) DeepGreen else LineSoft
+
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom,
+    ) {
+        Text(
+            text = point.totalSales.toShortRupiah(),
+            color = DeepGreen,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(86.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(18.dp)
+                    .height(barHeight.dp)
+                    .background(barColor, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)),
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = point.label,
+            color = MutedText,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -575,7 +743,7 @@ private fun ReportMetricCard(
     modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier.height(132.dp),
+        modifier = modifier.height(116.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.dp, LineSoft),
@@ -584,7 +752,7 @@ private fun ReportMetricCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(15.dp),
+                .padding(13.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
@@ -603,14 +771,14 @@ private fun ReportMetricCard(
                 )
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(32.dp)
                         .background(iconBackground, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         tint = DeepGreen,
                     )
                 }
@@ -699,36 +867,6 @@ private fun HistoryShortcutCard(
 }
 
 @Composable
-private fun ReportNoteCard() {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding(),
-        shape = RoundedCornerShape(18.dp),
-        color = SoftGray,
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(
-                progress = { 1f },
-                modifier = Modifier.size(28.dp),
-                color = DeepGreen,
-                strokeWidth = 3.dp,
-                trackColor = LineSoft,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "Data laporan dihitung dari transaksi yang tersimpan di perangkat ini.",
-                color = MutedText,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
-}
-
-@Composable
 private fun ReportMessageCard(
     message: String,
 ) {
@@ -757,11 +895,12 @@ private fun Long.toRupiah(): String {
     return "Rp$grouped"
 }
 
-private fun ReportSummary.marginPercent(): String {
-    if (totalSales <= 0L) return "0%"
-
-    val percent = (totalProfit * 100) / totalSales
-    return "$percent%"
+private fun Long.toShortRupiah(): String {
+    return when {
+        this >= 1_000_000L -> "Rp${this / 1_000_000L}jt"
+        this >= 1_000L -> "Rp${this / 1_000L}rb"
+        else -> "Rp$this"
+    }
 }
 
 private fun ReportExportRange.descriptionForUi(): String {

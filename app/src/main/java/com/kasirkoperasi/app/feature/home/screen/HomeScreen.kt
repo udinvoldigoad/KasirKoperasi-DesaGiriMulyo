@@ -1,6 +1,5 @@
 package com.kasirkoperasi.app.feature.home.screen
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,15 +54,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.kasirkoperasi.app.core.barcode.Code128BarcodeGenerator
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
@@ -103,7 +99,6 @@ fun HomeScreen(
     }
     val lowStock = lowStockProducts.size
     var showLowStockSheet by rememberSaveable { mutableStateOf(false) }
-    var showSampleBarcodeSheet by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -175,12 +170,6 @@ fun HomeScreen(
                     onClick = { onRouteSelected(AppRoute.Transaction.route) },
                 )
             }
-
-            item {
-                SampleBarcodeButton(
-                    onClick = { showSampleBarcodeSheet = true },
-                )
-            }
         }
     }
 
@@ -188,13 +177,6 @@ fun HomeScreen(
         LowStockSheet(
             products = lowStockProducts,
             onDismiss = { showLowStockSheet = false },
-        )
-    }
-
-    if (showSampleBarcodeSheet) {
-        SampleBarcodeSheet(
-            barcodeValue = SAMPLE_BARCODE_VALUE,
-            onDismiss = { showSampleBarcodeSheet = false },
         )
     }
 }
@@ -760,134 +742,6 @@ private fun NewTransactionButton(
 }
 
 @Composable
-private fun SampleBarcodeButton(
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, LineSoft),
-        shadowElevation = 2.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.QrCodeScanner,
-                contentDescription = null,
-                modifier = Modifier.size(26.dp),
-                tint = DeepGreen,
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Generate Barcode Contoh",
-                color = DeepGreen,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SampleBarcodeSheet(
-    barcodeValue: String,
-    onDismiss: () -> Unit,
-) {
-    val barcodeBitmap = remember(barcodeValue) {
-        Code128BarcodeGenerator.generate(barcodeValue)
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { onDismiss() },
-        )
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.54f)
-                .clickable { },
-            color = CreamBackground,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            shadowElevation = 12.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding()
-                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                HomePanelHandle(onDismiss = onDismiss)
-
-                Text(
-                    text = "Barcode Contoh",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = DeepGreen,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
-
-                Text(
-                    text = "Kode contoh: $barcodeValue. Pakai ini untuk menguji fitur scan kamera.",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MutedText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, LineSoft),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Image(
-                            bitmap = barcodeBitmap.asImageBitmap(),
-                            contentDescription = "Barcode $barcodeValue",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(128.dp),
-                            contentScale = ContentScale.Fit,
-                        )
-                        Text(
-                            text = barcodeValue,
-                            color = Color(0xFF17221B),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun ComingSoonScreen(
     title: String,
     selectedRoute: String,
@@ -987,8 +841,6 @@ private fun Long.toRupiah(): String {
 
     return "Rp$grouped"
 }
-
-private const val SAMPLE_BARCODE_VALUE = "0001"
 
 private fun calculateProfitPercentage(
     sales: Long,

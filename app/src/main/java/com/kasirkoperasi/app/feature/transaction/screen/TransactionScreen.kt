@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -50,6 +51,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -101,6 +103,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -130,6 +133,7 @@ fun TransactionScreen(
     var activeSheet by remember { mutableStateOf<TransactionSheet?>(null) }
     var isSuccessDialogVisible by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
+    var outOfStockMessage by remember { mutableStateOf<String?>(null) }
     var printMessage by remember { mutableStateOf<String?>(null) }
     var printErrorMessage by remember { mutableStateOf<String?>(null) }
     var isPrintingReceipt by remember { mutableStateOf(false) }
@@ -184,10 +188,13 @@ fun TransactionScreen(
 
     val filteredProducts by remember(products, uiState.searchQuery) {
         derivedStateOf {
-            products.filter { product ->
+            val filtered = products.filter { product ->
                 product.name.contains(uiState.searchQuery, ignoreCase = true) ||
                     product.barcode.orEmpty().contains(uiState.searchQuery, ignoreCase = true)
             }
+
+            val (availableProducts, outOfStockProducts) = filtered.partition { it.stockQuantity > 0 }
+            availableProducts + outOfStockProducts
         }
     }
     val cartQuantityByProductId by remember(uiState.cartItems) {
@@ -209,6 +216,13 @@ fun TransactionScreen(
     LaunchedEffect(uiState.cartItems.isEmpty()) {
         if (uiState.cartItems.isEmpty() && activeSheet == TransactionSheet.Cart) {
             activeSheet = null
+        }
+    }
+
+    LaunchedEffect(outOfStockMessage) {
+        if (outOfStockMessage != null) {
+            delay(2200)
+            outOfStockMessage = null
         }
     }
 
@@ -279,6 +293,7 @@ fun TransactionScreen(
                                 onValueChange = {
                                     onSearchChange(it)
                                     onClearMessage()
+                                    outOfStockMessage = null
                                 },
                                 onScanClick = startBarcodeScan,
                             )
@@ -315,10 +330,21 @@ fun TransactionScreen(
                                 items = filteredProducts,
                                 key = { "product-${it.id}" },
                             ) { product ->
+                                val isOutOfStock = product.stockQuantity <= 0
+
                                 ProductPickCard(
                                     product = product,
                                     cartQuantity = cartQuantityByProductId[product.id] ?: 0,
-                                    onClick = { onAddProduct(product) },
+                                    isOutOfStock = isOutOfStock,
+                                    onClick = {
+                                        if (isOutOfStock) {
+                                            onClearMessage()
+                                            outOfStockMessage = "${product.name} sedang kosong. Tambah stok di menu Barang."
+                                        } else {
+                                            outOfStockMessage = null
+                                            onAddProduct(product)
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -380,6 +406,16 @@ fun TransactionScreen(
                     }
                 }
             }
+        }
+
+        outOfStockMessage?.let { message ->
+            FloatingStockMessage(
+                message = message,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 68.dp, start = 16.dp, end = 16.dp),
+            )
         }
 
         if (shouldShowSuccessDialog) {
@@ -1021,47 +1057,49 @@ private fun PaymentSheetContent(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = uiState.paidAmountText,
-                onValueChange = onPaidAmountChange,
-                modifier = Modifier.weight(1f),
-                label = { Text("Uang dibayarkan") },
-                prefix = { Text("Rp") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DeepGreen,
-                    unfocusedBorderColor = LineSoft,
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    cursorColor = DeepGreen,
-                ),
-            )
-            Button(
-                onClick = onUseExactAmount,
-                modifier = Modifier.height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = FreshMint,
-                    contentColor = DeepGreen,
-                ),
-                shape = RoundedCornerShape(14.dp),
+        if (uiState.selectedPaymentMethod == PaymentMethod.Cash) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Uang Pas",
-                    fontWeight = FontWeight.Bold,
+                OutlinedTextField(
+                    value = uiState.paidAmountText,
+                    onValueChange = onPaidAmountChange,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Uang dibayarkan") },
+                    prefix = { Text("Rp") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DeepGreen,
+                        unfocusedBorderColor = LineSoft,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        cursorColor = DeepGreen,
+                    ),
                 )
+                Button(
+                    onClick = onUseExactAmount,
+                    modifier = Modifier.height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FreshMint,
+                        contentColor = DeepGreen,
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Text(
+                        text = "Uang Pas",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
-        }
 
-        ChangeInfoCard(
-            uiState = uiState,
-        )
+            ChangeInfoCard(
+                uiState = uiState,
+            )
+        }
 
         uiState.errorMessage?.let { message ->
             MessageCard(
@@ -1305,6 +1343,18 @@ private fun SearchField(
                 tint = DeepGreen,
             )
         },
+        trailingIcon = {
+            if (value.isNotBlank()) {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Hapus pencarian",
+                        modifier = Modifier.size(20.dp),
+                        tint = MutedText,
+                    )
+                }
+            }
+        },
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
@@ -1322,16 +1372,19 @@ private fun SearchField(
 private fun ProductPickCard(
     product: Product,
     cartQuantity: Int,
+    isOutOfStock: Boolean,
     onClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOutOfStock) SoftGray else Color.White,
+        ),
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, LineSoft),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, if (isOutOfStock) Color(0xFFE0E2DC) else LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isOutOfStock) 0.dp else 2.dp),
     ) {
         Row(
             modifier = Modifier
@@ -1366,7 +1419,7 @@ private fun ProductPickCard(
             ) {
                 Text(
                     text = product.name,
-                    color = Color(0xFF17221B),
+                    color = if (isOutOfStock) MutedText else Color(0xFF17221B),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1374,22 +1427,77 @@ private fun ProductPickCard(
                 )
                 Text(
                     text = "${product.stockQuantity} ${product.unit}",
-                    color = MutedText,
+                    color = if (isOutOfStock) MaterialTheme.colorScheme.error else MutedText,
                     style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isOutOfStock) FontWeight.Bold else FontWeight.Normal,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = product.sellingPrice.toRupiah(),
-                    color = DeepGreen,
+                    color = if (isOutOfStock) MutedText else DeepGreen,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Tambah",
-                    color = DeepGreen,
+                    text = if (isOutOfStock) "Stok kosong" else "Tambah",
+                    color = if (isOutOfStock) MaterialTheme.colorScheme.error else DeepGreen,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingStockMessage(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, Color(0xFFFFD6A7)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(Color(0xFFFFE8CC), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Inventory2,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = Color(0xFFB45309),
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Stok Kosong",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = message,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

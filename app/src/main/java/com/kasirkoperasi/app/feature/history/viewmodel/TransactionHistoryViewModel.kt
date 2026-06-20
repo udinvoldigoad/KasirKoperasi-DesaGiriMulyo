@@ -8,6 +8,8 @@ import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.feature.history.state.TransactionHistoryRange
 import com.kasirkoperasi.app.feature.history.state.TransactionHistoryUiState
 import java.util.Calendar
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,8 +22,12 @@ class TransactionHistoryViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TransactionHistoryUiState())
     val uiState: StateFlow<TransactionHistoryUiState> = _uiState.asStateFlow()
+    private var loadTransactionsJob: Job? = null
 
     fun selectRange(range: TransactionHistoryRange) {
+        val currentState = _uiState.value
+        if (currentState.selectedRange == range && !currentState.isLoading) return
+
         loadTransactions(range)
     }
 
@@ -30,7 +36,8 @@ class TransactionHistoryViewModel(
     ) {
         val (startDateMillis, endDateMillis) = range.toMillisRange()
 
-        viewModelScope.launch {
+        loadTransactionsJob?.cancel()
+        loadTransactionsJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -42,19 +49,20 @@ class TransactionHistoryViewModel(
                 )
             }
 
-            runCatching {
-                getSalesTransactionsUseCase(
+            try {
+                val transactions = getSalesTransactionsUseCase(
                     startDateMillis = startDateMillis,
                     endDateMillis = endDateMillis,
                 )
-            }.onSuccess { transactions ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         transactions = transactions,
                     )
                 }
-            }.onFailure { throwable ->
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+
                 _uiState.update {
                     it.copy(
                         isLoading = false,

@@ -1,6 +1,17 @@
 package com.kasirkoperasi.app.feature.history.screen
 
+import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -44,14 +55,23 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
@@ -81,15 +101,19 @@ fun TransactionHistoryScreen(
     onRouteSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     storeLogoUri: String? = null,
+    productImageById: Map<Long, String?> = emptyMap(),
     onBackClick: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(if (uiState.isLoading) 2.dp else 0.dp),
             containerColor = CreamBackground,
             topBar = {
                 HistoryTopBar(
                     logoUri = storeLogoUri,
+                    isRefreshing = uiState.isLoading,
                     onRefresh = onRefresh,
                     onBackClick = onBackClick,
                 )
@@ -113,16 +137,6 @@ fun TransactionHistoryScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                if (uiState.isLoading) {
-                    item {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = DeepGreen,
-                            trackColor = SoftGray,
-                        )
-                    }
-                }
-
                 item {
                     RangeFilterRow(
                         selectedRange = uiState.selectedRange,
@@ -169,9 +183,17 @@ fun TransactionHistoryScreen(
             TransactionDetailOverlay(
                 transaction = transaction,
                 items = uiState.selectedTransactionItems,
+                productImageById = productImageById,
                 isLoading = uiState.isDetailLoading,
                 errorMessage = uiState.detailErrorMessage,
                 onDismiss = onDismissDetail,
+            )
+        }
+
+        if (uiState.isLoading) {
+            HistoryLoadingModal(
+                title = "Memperbarui riwayat",
+                caption = "Transaksi ${uiState.selectedRange.description.lowercase()} sedang dimuat ulang.",
             )
         }
     }
@@ -180,9 +202,20 @@ fun TransactionHistoryScreen(
 @Composable
 private fun HistoryTopBar(
     logoUri: String?,
+    isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onBackClick: (() -> Unit)?,
 ) {
+    val refreshRotation by rememberInfiniteTransition(label = "history-refresh-icon")
+        .animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 850, easing = LinearEasing),
+            ),
+            label = "history-refresh-rotation",
+        )
+
     Surface(
         color = CreamBackground,
         shadowElevation = 2.dp,
@@ -222,15 +255,119 @@ private fun HistoryTopBar(
 
             IconButton(
                 onClick = onRefresh,
-                modifier = Modifier.size(40.dp),
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        color = if (isRefreshing) FreshMint else Color.Transparent,
+                        shape = CircleShape,
+                    ),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Refresh,
                     contentDescription = "Muat ulang riwayat",
-                    modifier = Modifier.size(24.dp),
-                    tint = Color(0xFF303A34),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .graphicsLayer {
+                            rotationZ = if (isRefreshing) refreshRotation else 0f
+                        },
+                    tint = if (isRefreshing) DeepGreen else Color(0xFF303A34),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun HistoryLoadingModal(
+    title: String,
+    caption: String,
+) {
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 120)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable { },
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 34.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = Color.White,
+                shadowElevation = 16.dp,
+                border = BorderStroke(1.dp, FreshMint),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(62.dp)
+                            .background(FreshMint, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        LoadingDots()
+                    }
+
+                    Text(
+                        text = title,
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = caption,
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingDots() {
+    val phase by rememberInfiniteTransition(label = "history-loading-dots")
+        .animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "history-loading-dot-phase",
+        )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(3) { index ->
+            val wave = ((phase + index * 0.22f) % 1f).let { value ->
+                if (value <= 0.5f) value * 2f else (1f - value) * 2f
+            }
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .graphicsLayer {
+                        alpha = 0.42f + (wave * 0.58f)
+                        scaleX = 0.72f + (wave * 0.32f)
+                        scaleY = 0.72f + (wave * 0.32f)
+                    }
+                    .background(DeepGreen, CircleShape),
+            )
         }
     }
 }
@@ -544,6 +681,7 @@ private fun TransactionHistoryCard(
 private fun TransactionDetailOverlay(
     transaction: SalesTransaction,
     items: List<SalesTransactionItem>,
+    productImageById: Map<Long, String?>,
     isLoading: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
@@ -611,7 +749,10 @@ private fun TransactionDetailOverlay(
                             items = items,
                             key = { it.id },
                         ) { item ->
-                            TransactionDetailItemCard(item = item)
+                            TransactionDetailItemCard(
+                                item = item,
+                                imageUri = productImageById[item.productId],
+                            )
                         }
                     }
                 }
@@ -798,6 +939,7 @@ private fun TransactionDetailSummaryCard(
 @Composable
 private fun TransactionDetailItemCard(
     item: SalesTransactionItem,
+    imageUri: String?,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -813,19 +955,7 @@ private fun TransactionDetailItemCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(SoftGray, RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Inventory2,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = DeepGreen,
-                )
-            }
+            ProductPhotoThumbnail(imageUri = imageUri)
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -873,6 +1003,48 @@ private fun TransactionDetailItemCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ProductPhotoThumbnail(
+    imageUri: String?,
+) {
+    val bitmap = rememberProductBitmap(imageUri)
+    val shape = RoundedCornerShape(14.dp)
+
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(shape)
+            .background(SoftGray, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Foto barang",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.Inventory2,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = DeepGreen,
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberProductBitmap(imageUri: String?): Bitmap? {
+    val context = LocalContext.current
+    return remember(context, imageUri) {
+        imageUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ProductImageStore.loadBitmap(context = context, imageUri = it, targetSize = 160) }
     }
 }
 

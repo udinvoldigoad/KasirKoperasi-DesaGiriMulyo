@@ -7,16 +7,20 @@ import com.kasirkoperasi.app.domain.model.SalesTransaction
 
 class ExportTransactionReportPdfUseCase(
     private val getSalesTransactionItemsUseCase: GetSalesTransactionItemsUseCase,
+    private val getProductsUseCase: GetProductsUseCase,
     private val transactionReportPdfExporter: TransactionReportPdfExporter,
 ) {
     suspend operator fun invoke(
         periodLabel: String,
         transactions: List<SalesTransaction>,
     ): Uri {
-        require(transactions.isNotEmpty()) { "Tidak ada transaksi untuk diexport" }
-
         val itemsByTransactionId = transactions.associate { transaction ->
             transaction.id to getSalesTransactionItemsUseCase(transaction.id)
+        }
+        val products = getProductsUseCase()
+
+        require(transactions.isNotEmpty() || products.isNotEmpty()) {
+            "Tidak ada data untuk diexport"
         }
 
         return transactionReportPdfExporter.export(
@@ -24,6 +28,7 @@ class ExportTransactionReportPdfUseCase(
                 periodLabel = periodLabel,
                 transactions = transactions,
                 itemsByTransactionId = itemsByTransactionId,
+                stockProducts = products,
             ),
         )
     }

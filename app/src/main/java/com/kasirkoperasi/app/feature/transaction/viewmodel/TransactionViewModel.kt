@@ -226,6 +226,11 @@ class TransactionViewModel(
                     quantity = it.quantity,
                 )
             }
+            val paidAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Qris) {
+                currentState.totalAmount
+            } else {
+                currentState.paidAmount
+            }
 
             runCatching {
                 completeSalesTransactionUseCase(
@@ -233,15 +238,11 @@ class TransactionViewModel(
                     payment = SalesTransactionPayment(
                         buyerName = currentState.buyerName,
                         paymentMethod = currentState.selectedPaymentMethod.label,
-                        paidAmount = currentState.paidAmount,
+                        paidAmount = paidAmount,
                     ),
                 )
             }.onSuccess {
-                val completedPaidAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Qris) {
-                    currentState.totalAmount
-                } else {
-                    currentState.paidAmount
-                }
+                val completedPaidAmount = paidAmount
                 val completedChangeAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Cash) {
                     (completedPaidAmount - currentState.totalAmount).coerceAtLeast(0L)
                 } else {

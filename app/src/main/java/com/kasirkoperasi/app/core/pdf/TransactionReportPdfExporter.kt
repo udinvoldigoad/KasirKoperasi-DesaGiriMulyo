@@ -9,6 +9,7 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.kasirkoperasi.app.core.settings.StoreProfileStore
+import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import java.io.File
@@ -21,6 +22,7 @@ data class TransactionReportPdfData(
     val periodLabel: String,
     val transactions: List<SalesTransaction>,
     val itemsByTransactionId: Map<Long, List<SalesTransactionItem>>,
+    val stockProducts: List<Product>,
     val exportedAtMillis: Long = System.currentTimeMillis(),
 )
 
@@ -28,7 +30,9 @@ class TransactionReportPdfExporter(
     private val context: Context,
 ) {
     fun export(data: TransactionReportPdfData): Uri {
-        require(data.transactions.isNotEmpty()) { "Tidak ada transaksi untuk diexport" }
+        require(data.transactions.isNotEmpty() || data.stockProducts.isNotEmpty()) {
+            "Tidak ada data untuk diexport"
+        }
 
         val document = PdfDocument()
         val renderer = PdfRenderer(
@@ -71,30 +75,31 @@ private class PdfRenderer(
     }
     private val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(105, 115, 109)
-        textSize = 10f
+        textSize = 10.5f
     }
     private val sectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(23, 34, 27)
-        textSize = 11f
+        textSize = 12f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(23, 34, 27)
-        textSize = 8.5f
+        textSize = 9.8f
     }
     private val boldBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(23, 34, 27)
-        textSize = 8.5f
+        textSize = 9.8f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(7, 84, 54)
-        textSize = 8.5f
+        textSize = 9.8f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(199, 210, 202)
+        color = Color.rgb(184, 197, 188)
         strokeWidth = 0.8f
+        style = Paint.Style.STROKE
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -107,29 +112,8 @@ private class PdfRenderer(
         startPage()
         drawReportHeader(data)
         drawSummary(data)
-        drawTableHeader()
-
-        var rowNumber = 1
-        data.transactions.forEach { transaction ->
-            val items = data.itemsByTransactionId[transaction.id].orEmpty()
-            if (items.isEmpty()) {
-                drawRow(
-                    rowNumber = rowNumber,
-                    transaction = transaction,
-                    item = null,
-                )
-                rowNumber += 1
-            } else {
-                items.forEach { item ->
-                    drawRow(
-                        rowNumber = rowNumber,
-                        transaction = transaction,
-                        item = item,
-                    )
-                    rowNumber += 1
-                }
-            }
-        }
+        drawTransactionSection(data)
+        drawStockSection(data.stockProducts)
 
         finishPage()
     }
@@ -200,62 +184,250 @@ private class PdfRenderer(
         canvas.drawText(value, x + 10f, y + 32f, sectionPaint)
     }
 
-    private fun drawTableHeader() {
+    private fun drawTransactionSection(data: TransactionReportPdfData) {
+        drawSectionTitle("Rekapan Transaksi")
+        drawTransactionTableHeader()
+
+        if (data.transactions.isEmpty()) {
+            drawEmptyTableMessage("Belum ada transaksi pada periode ini.")
+            y += 10f
+            return
+        }
+
+        var rowNumber = 1
+        data.transactions.forEach { transaction ->
+            val items = data.itemsByTransactionId[transaction.id].orEmpty()
+            if (items.isEmpty()) {
+                drawTransactionRow(
+                    rowNumber = rowNumber,
+                    transaction = transaction,
+                    item = null,
+                )
+                rowNumber += 1
+            } else {
+                items.forEach { item ->
+                    drawTransactionRow(
+                        rowNumber = rowNumber,
+                        transaction = transaction,
+                        item = item,
+                    )
+                    rowNumber += 1
+                }
+            }
+        }
+
+        y += 18f
+    }
+
+    private fun drawStockSection(products: List<Product>) {
+        drawSectionTitle("Laporan Stok Barang")
+        drawStockTableHeader()
+
+        if (products.isEmpty()) {
+            drawEmptyTableMessage("Belum ada data barang.")
+            return
+        }
+
+        products.forEachIndexed { index, product ->
+            drawStockRow(
+                rowNumber = index + 1,
+                product = product,
+            )
+        }
+    }
+
+    private fun drawSectionTitle(title: String) {
+        ensureSpace(SECTION_TITLE_HEIGHT + TABLE_HEADER_HEIGHT + ROW_HEIGHT)
+        canvas.drawText(title, MARGIN_LEFT, y, sectionPaint)
+        y += SECTION_TITLE_HEIGHT
+    }
+
+    private fun drawTransactionTableHeader() {
         ensureSpace(TABLE_HEADER_HEIGHT + ROW_HEIGHT)
 
+        val top = y
         fillPaint.color = Color.rgb(237, 238, 238)
-        canvas.drawRoundRect(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y + TABLE_HEADER_HEIGHT, 6f, 6f, fillPaint)
+        canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + TABLE_HEADER_HEIGHT, fillPaint)
 
         var x = MARGIN_LEFT + CELL_PADDING
-        TABLE_COLUMNS.forEach { column ->
-            canvas.drawText(column.title, x, y + 15f, headerPaint)
+        TRANSACTION_TABLE_COLUMNS.forEach { column ->
+            canvas.drawText(column.title, x, top + 16f, headerPaint)
             x += column.width
         }
+        drawTableGrid(
+            columns = TRANSACTION_TABLE_COLUMNS,
+            top = top,
+            height = TABLE_HEADER_HEIGHT,
+        )
         y += TABLE_HEADER_HEIGHT
     }
 
-    private fun drawRow(
+    private fun drawStockTableHeader() {
+        ensureSpace(TABLE_HEADER_HEIGHT + ROW_HEIGHT)
+
+        val top = y
+        fillPaint.color = Color.rgb(237, 238, 238)
+        canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + TABLE_HEADER_HEIGHT, fillPaint)
+
+        var x = MARGIN_LEFT + CELL_PADDING
+        STOCK_TABLE_COLUMNS.forEach { column ->
+            canvas.drawText(column.title, x, top + 16f, headerPaint)
+            x += column.width
+        }
+        drawTableGrid(
+            columns = STOCK_TABLE_COLUMNS,
+            top = top,
+            height = TABLE_HEADER_HEIGHT,
+        )
+        y += TABLE_HEADER_HEIGHT
+    }
+
+    private fun drawTransactionRow(
         rowNumber: Int,
         transaction: SalesTransaction,
         item: SalesTransactionItem?,
     ) {
-        ensureSpace(ROW_HEIGHT)
+        ensureSpace(ROW_HEIGHT) {
+            drawTransactionTableHeader()
+        }
 
+        val top = y
         if (rowNumber % 2 == 0) {
             fillPaint.color = Color.rgb(252, 252, 252)
-            canvas.drawRect(MARGIN_LEFT, y, PAGE_WIDTH - MARGIN_RIGHT, y + ROW_HEIGHT, fillPaint)
+            canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + ROW_HEIGHT, fillPaint)
         }
 
         val values = listOf(
             rowNumber.toString(),
             transaction.createdAtMillis.toShortDateTime(),
-            transaction.transactionNumber,
             transaction.buyerName.ifBlank { "Pembeli Umum" },
             item?.productName ?: "-",
             item?.let { "${it.quantity} ${it.unit}" } ?: "-",
             item?.sellingPrice?.toRupiah() ?: "-",
             item?.subtotal?.toRupiah() ?: transaction.totalAmount.toRupiah(),
-            item?.profit?.toRupiah() ?: transaction.totalProfit.toRupiah(),
             transaction.paymentMethod,
         )
 
         var x = MARGIN_LEFT + CELL_PADDING
-        TABLE_COLUMNS.forEachIndexed { index, column ->
-            val text = values[index].ellipsize(column.width - (CELL_PADDING * 2), bodyPaint)
-            canvas.drawText(text, x, y + 16f, if (index == 7 || index == 8) boldBodyPaint else bodyPaint)
+        TRANSACTION_TABLE_COLUMNS.forEachIndexed { index, column ->
+            val paint = if (index == 6) boldBodyPaint else bodyPaint
+            drawCell(
+                text = values[index],
+                x = x,
+                top = top,
+                width = column.width,
+                paint = paint,
+                maxLines = if (index == 3) 2 else 1,
+            )
             x += column.width
         }
 
-        canvas.drawLine(MARGIN_LEFT, y + ROW_HEIGHT, PAGE_WIDTH - MARGIN_RIGHT, y + ROW_HEIGHT, linePaint)
+        drawTableGrid(
+            columns = TRANSACTION_TABLE_COLUMNS,
+            top = top,
+            height = ROW_HEIGHT,
+        )
         y += ROW_HEIGHT
     }
 
-    private fun ensureSpace(requiredHeight: Float) {
+    private fun drawStockRow(
+        rowNumber: Int,
+        product: Product,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawStockTableHeader()
+        }
+
+        val top = y
+        if (rowNumber % 2 == 0) {
+            fillPaint.color = Color.rgb(252, 252, 252)
+            canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + ROW_HEIGHT, fillPaint)
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            product.barcode.orEmpty().ifBlank { "-" },
+            product.name,
+            product.category,
+            product.stockQuantity.toString(),
+            product.unit,
+            product.purchasePrice.toRupiah(),
+            product.sellingPrice.toRupiah(),
+        )
+
+        var x = MARGIN_LEFT + CELL_PADDING
+        STOCK_TABLE_COLUMNS.forEachIndexed { index, column ->
+            drawCell(
+                text = values[index],
+                x = x,
+                top = top,
+                width = column.width,
+                paint = if (index == 4) boldBodyPaint else bodyPaint,
+                maxLines = if (index == 2) 2 else 1,
+            )
+            x += column.width
+        }
+
+        drawTableGrid(
+            columns = STOCK_TABLE_COLUMNS,
+            top = top,
+            height = ROW_HEIGHT,
+        )
+        y += ROW_HEIGHT
+    }
+
+    private fun drawEmptyTableMessage(message: String) {
+        ensureSpace(ROW_HEIGHT)
+        val top = y
+        canvas.drawText(message, MARGIN_LEFT + CELL_PADDING, top + 20f, bodyPaint)
+        canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + ROW_HEIGHT, linePaint)
+        y += ROW_HEIGHT
+    }
+
+    private fun drawCell(
+        text: String,
+        x: Float,
+        top: Float,
+        width: Float,
+        paint: Paint,
+        maxLines: Int = 1,
+    ) {
+        val lines = text.wrapToLines(
+            maxWidth = width - (CELL_PADDING * 2),
+            paint = paint,
+            maxLines = maxLines,
+        )
+        lines.forEachIndexed { index, line ->
+            canvas.drawText(line, x, top + 15.5f + (index * 11.5f), paint)
+        }
+    }
+
+    private fun drawTableGrid(
+        columns: List<TableColumn>,
+        top: Float,
+        height: Float,
+    ) {
+        val bottom = top + height
+        canvas.drawLine(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top, linePaint)
+        canvas.drawLine(MARGIN_LEFT, bottom, PAGE_WIDTH - MARGIN_RIGHT, bottom, linePaint)
+
+        var x = MARGIN_LEFT
+        canvas.drawLine(x, top, x, bottom, linePaint)
+        columns.forEach { column ->
+            x += column.width
+            canvas.drawLine(x, top, x, bottom, linePaint)
+        }
+    }
+
+    private fun ensureSpace(
+        requiredHeight: Float,
+        onPageBreak: (() -> Unit)? = null,
+    ) {
         if (y + requiredHeight <= PAGE_HEIGHT - MARGIN_BOTTOM) return
 
         finishPage()
         startPage()
-        drawTableHeader()
+        onPageBreak?.invoke()
     }
 
     private fun drawDivider() {
@@ -281,23 +453,73 @@ private class PdfRenderer(
         const val MARGIN_RIGHT = 28f
         const val MARGIN_TOP = 30f
         const val MARGIN_BOTTOM = 36f
-        const val CELL_PADDING = 5f
-        const val TABLE_HEADER_HEIGHT = 22f
-        const val ROW_HEIGHT = 24f
+        const val CELL_PADDING = 4f
+        const val SECTION_TITLE_HEIGHT = 20f
+        const val TABLE_HEADER_HEIGHT = 25f
+        const val ROW_HEIGHT = 40f
 
-        val TABLE_COLUMNS = listOf(
-            TableColumn("No", 28f),
-            TableColumn("Tanggal", 76f),
-            TableColumn("No Transaksi", 112f),
-            TableColumn("Pembeli", 82f),
-            TableColumn("Barang", 134f),
-            TableColumn("Qty", 45f),
-            TableColumn("Harga", 70f),
-            TableColumn("Subtotal", 80f),
-            TableColumn("Profit", 68f),
-            TableColumn("Bayar", 70f),
+        val TRANSACTION_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 92f),
+            TableColumn("Pembeli", 112f),
+            TableColumn("Barang", 246f),
+            TableColumn("Qty", 54f),
+            TableColumn("Harga", 86f),
+            TableColumn("Subtotal", 96f),
+            TableColumn("Bayar", 68f),
+        )
+
+        val STOCK_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Kode", 70f),
+            TableColumn("Barang", 250f),
+            TableColumn("Kategori", 104f),
+            TableColumn("Stok", 58f),
+            TableColumn("Satuan", 60f),
+            TableColumn("Harga Beli", 106f),
+            TableColumn("Harga Jual", 106f),
         )
     }
+}
+
+private fun String.wrapToLines(
+    maxWidth: Float,
+    paint: Paint,
+    maxLines: Int,
+): List<String> {
+    if (maxLines <= 1) return listOf(ellipsize(maxWidth, paint))
+
+    val words = trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (words.isEmpty()) return listOf("")
+
+    val lines = mutableListOf<String>()
+    var currentLine = ""
+
+    words.forEachIndexed { index, word ->
+        val candidate = if (currentLine.isBlank()) word else "$currentLine $word"
+        if (paint.measureText(candidate) <= maxWidth) {
+            currentLine = candidate
+            return@forEachIndexed
+        }
+
+        if (currentLine.isNotBlank()) {
+            lines += currentLine
+        }
+
+        val remainingText = words.drop(index).joinToString(" ")
+        if (lines.size == maxLines - 1) {
+            lines += remainingText.ellipsize(maxWidth, paint)
+            return lines
+        }
+
+        currentLine = word
+    }
+
+    if (currentLine.isNotBlank() && lines.size < maxLines) {
+        lines += currentLine.ellipsize(maxWidth, paint)
+    }
+
+    return lines.take(maxLines)
 }
 
 private fun String.ellipsize(

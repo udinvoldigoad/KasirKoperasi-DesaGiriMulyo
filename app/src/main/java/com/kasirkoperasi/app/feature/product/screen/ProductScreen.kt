@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Inventory2
@@ -52,6 +53,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -203,16 +205,30 @@ private fun ProductListScreen(
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("Semua") }
+    var selectedStockSort by rememberSaveable { mutableStateOf(ProductStockSort.Default) }
+    var isStockFilterPanelVisible by rememberSaveable { mutableStateOf(false) }
 
-    val filteredProducts by remember(uiState.products, searchQuery, selectedCategory) {
+    val filteredProducts by remember(uiState.products, searchQuery, selectedCategory, selectedStockSort) {
         derivedStateOf {
-            uiState.products.filter { product ->
+            val filtered = uiState.products.filter { product ->
                 val matchesSearch = product.name.contains(searchQuery, ignoreCase = true) ||
                     product.barcode.orEmpty().contains(searchQuery, ignoreCase = true)
                 val matchesCategory = selectedCategory == ProductCategory.ALL ||
                     ProductCategory.normalize(product.category) == selectedCategory
 
                 matchesSearch && matchesCategory
+            }
+
+            when (selectedStockSort) {
+                ProductStockSort.Default -> filtered
+                ProductStockSort.LowestStock -> filtered.sortedWith(
+                    compareBy<Product> { it.stockQuantity }
+                        .thenBy { it.name.lowercase() },
+                )
+                ProductStockSort.HighestStock -> filtered.sortedWith(
+                    compareByDescending<Product> { it.stockQuantity }
+                        .thenBy { it.name.lowercase() },
+                )
             }
         }
     }
@@ -275,6 +291,15 @@ private fun ProductListScreen(
                             searchQuery = it
                             onClearMessage()
                         },
+                        onSearchClear = {
+                            searchQuery = ""
+                            onClearMessage()
+                        },
+                        isStockSortActive = selectedStockSort != ProductStockSort.Default,
+                        onFilterClick = {
+                            isStockFilterPanelVisible = true
+                            onClearMessage()
+                        },
                     )
                 }
 
@@ -323,6 +348,18 @@ private fun ProductListScreen(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
                     .padding(top = 68.dp, start = 16.dp, end = 16.dp),
+            )
+        }
+
+        if (isStockFilterPanelVisible) {
+            ProductStockFilterPanel(
+                selectedSort = selectedStockSort,
+                onDismiss = { isStockFilterPanelVisible = false },
+                onSortSelected = { sort ->
+                    selectedStockSort = sort
+                    isStockFilterPanelVisible = false
+                    onClearMessage()
+                },
             )
         }
     }
@@ -495,7 +532,7 @@ private fun ProductFormScreen(
                 KasirTextField(
                     value = purchasePrice,
                     onValueChange = {
-                        purchasePrice = it.onlyDigits()
+                        purchasePrice = it.toGroupedNumberInput()
                         onClearMessage()
                     },
                     label = "Harga Beli",
@@ -508,7 +545,7 @@ private fun ProductFormScreen(
                 KasirTextField(
                     value = sellingPrice,
                     onValueChange = {
-                        sellingPrice = it.onlyDigits()
+                        sellingPrice = it.toGroupedNumberInput()
                         onClearMessage()
                     },
                     label = "Harga Jual*",
@@ -579,10 +616,10 @@ private fun ProductEditSheet(
     var name by rememberSaveable(product.id) { mutableStateOf(product.name) }
     var category by rememberSaveable(product.id) { mutableStateOf(ProductCategory.normalize(product.category)) }
     var purchasePrice by rememberSaveable(product.id) {
-        mutableStateOf(product.purchasePrice.takeIf { it > 0L }?.toString().orEmpty())
+        mutableStateOf(product.purchasePrice.takeIf { it > 0L }?.toGroupedNumber().orEmpty())
     }
     var sellingPrice by rememberSaveable(product.id) {
-        mutableStateOf(product.sellingPrice.takeIf { it > 0L }?.toString().orEmpty())
+        mutableStateOf(product.sellingPrice.takeIf { it > 0L }?.toGroupedNumber().orEmpty())
     }
     var stockInQuantity by rememberSaveable(product.id) { mutableStateOf("") }
     var imageUri by rememberSaveable(product.id) { mutableStateOf(product.imageUri.orEmpty()) }
@@ -685,7 +722,7 @@ private fun ProductEditSheet(
                             title = "Harga Beli",
                             value = purchasePrice,
                             onValueChange = {
-                                purchasePrice = it.onlyDigits()
+                                purchasePrice = it.toGroupedNumberInput()
                                 onClearMessage()
                             },
                             label = "Harga Beli",
@@ -699,7 +736,7 @@ private fun ProductEditSheet(
                             title = "Harga Jual",
                             value = sellingPrice,
                             onValueChange = {
-                                sellingPrice = it.onlyDigits()
+                                sellingPrice = it.toGroupedNumberInput()
                                 onClearMessage()
                             },
                             label = "Harga Jual*",
@@ -1067,6 +1104,9 @@ private fun rememberProductBitmap(imageUri: String?): Bitmap? {
 private fun SearchAndFilterRow(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
+    onSearchClear: () -> Unit,
+    isStockSortActive: Boolean,
+    onFilterClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1079,10 +1119,207 @@ private fun SearchAndFilterRow(
             modifier = Modifier.weight(1f),
             label = "Cari produk...",
             leading = { SearchLineIcon() },
+            trailing = if (searchQuery.isNotBlank()) {
+                {
+                    IconButton(
+                        onClick = onSearchClear,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Hapus pencarian",
+                            modifier = Modifier.size(20.dp),
+                            tint = MutedText,
+                        )
+                    }
+                }
+            } else {
+                null
+            },
         )
 
-        SquareIconButton {
+        SquareIconButton(
+            onClick = onFilterClick,
+            active = isStockSortActive,
+        ) {
             FilterLineIcon()
+        }
+    }
+}
+
+@Composable
+private fun ProductStockFilterPanel(
+    selectedSort: ProductStockSort,
+    onDismiss: () -> Unit,
+    onSortSelected: (ProductStockSort) -> Unit,
+) {
+    val panelHeight = if (selectedSort == ProductStockSort.Default) 0.46f else 0.56f
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(panelHeight)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ProductPanelHandle(onDismiss = onDismiss)
+
+                Text(
+                    text = "Filter Stok",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    text = "Urutkan daftar barang berdasarkan jumlah stok.",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(bottom = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item {
+                        StockSortOption(
+                            title = "Stok Terendah",
+                            description = "Barang dengan stok paling sedikit tampil di atas.",
+                            selected = selectedSort == ProductStockSort.LowestStock,
+                            onClick = { onSortSelected(ProductStockSort.LowestStock) },
+                        )
+                    }
+
+                    item {
+                        StockSortOption(
+                            title = "Stok Tertinggi",
+                            description = "Barang dengan stok paling banyak tampil di atas.",
+                            selected = selectedSort == ProductStockSort.HighestStock,
+                            onClick = { onSortSelected(ProductStockSort.HighestStock) },
+                        )
+                    }
+
+                    if (selectedSort != ProductStockSort.Default) {
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            ResetFilterOption(
+                                onClick = { onSortSelected(ProductStockSort.Default) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResetFilterOption(
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.28f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Text(
+            text = "Reset Filter",
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 16.dp),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun StockSortOption(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, if (selected) DeepGreen.copy(alpha = 0.24f) else LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 0.dp else 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(if (selected) FreshMint else SoftGray, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (selected) Icons.Outlined.CheckCircle else Icons.Outlined.Inventory2,
+                    contentDescription = null,
+                    modifier = Modifier.size(23.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = description,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }
@@ -1454,6 +1691,7 @@ private fun KasirTextField(
     label: String,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     OutlinedTextField(
@@ -1469,6 +1707,7 @@ private fun KasirTextField(
             )
         },
         leadingIcon = leading,
+        trailingIcon = trailing,
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
@@ -1483,13 +1722,19 @@ private fun KasirTextField(
 }
 
 @Composable
-private fun SquareIconButton(content: @Composable () -> Unit) {
+private fun SquareIconButton(
+    onClick: () -> Unit,
+    active: Boolean = false,
+    content: @Composable () -> Unit,
+) {
     Surface(
-        modifier = Modifier.size(54.dp),
+        modifier = Modifier
+            .size(54.dp)
+            .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
-        color = SoftGray,
-        border = BorderStroke(1.dp, LineSoft),
-        shadowElevation = 2.dp,
+        color = if (active) FreshMint else SoftGray,
+        border = BorderStroke(1.dp, if (active) DeepGreen.copy(alpha = 0.2f) else LineSoft),
+        shadowElevation = if (active) 0.dp else 2.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
             content()
@@ -1804,12 +2049,31 @@ private fun KasirIcon(
     )
 }
 
+private enum class ProductStockSort {
+    Default,
+    LowestStock,
+    HighestStock,
+}
+
 private fun String.onlyDigits(): String {
     return filter { it.isDigit() }
 }
 
+private fun String.toGroupedNumberInput(): String {
+    val digits = onlyDigits()
+    if (digits.isBlank()) return ""
+
+    return digits.toLongOrNull()?.toGroupedNumber() ?: digits
+}
+
+private fun Long.toGroupedNumber(): String {
+    return toString()
+        .reversed()
+        .chunked(3)
+        .joinToString(".")
+        .reversed()
+}
+
 private fun Long.toRupiah(): String {
-    val reversed = toString().reversed()
-    val grouped = reversed.chunked(3).joinToString(".").reversed()
-    return "Rp$grouped"
+    return "Rp${toGroupedNumber()}"
 }

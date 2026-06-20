@@ -263,6 +263,11 @@ class MainActivity : ComponentActivity() {
 
                     AppRoute.History.route -> {
                         val transactionHistoryUiState by transactionHistoryViewModel.uiState.collectAsState()
+                        val productImageById = remember(productUiState.products) {
+                            productUiState.products.associate { product ->
+                                product.id to product.imageUri
+                            }
+                        }
 
                         LaunchedEffect(selectedRoute) {
                             transactionHistoryViewModel.loadTransactions()
@@ -276,6 +281,7 @@ class MainActivity : ComponentActivity() {
                             onDismissDetail = transactionHistoryViewModel::dismissTransactionDetail,
                             onRouteSelected = { selectedRoute = it },
                             storeLogoUri = settingsUiState.logoUri,
+                            productImageById = productImageById,
                             onBackClick = { selectedRoute = AppRoute.Report.route },
                             modifier = Modifier.fillMaxSize(),
                         )
