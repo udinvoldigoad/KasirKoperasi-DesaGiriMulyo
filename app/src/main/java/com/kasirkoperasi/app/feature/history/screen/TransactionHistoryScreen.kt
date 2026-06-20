@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -79,13 +80,19 @@ fun TransactionHistoryScreen(
     onDismissDetail: () -> Unit,
     onRouteSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
+    storeLogoUri: String? = null,
+    onBackClick: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = CreamBackground,
             topBar = {
-                HistoryTopBar(onRefresh = onRefresh)
+                HistoryTopBar(
+                    logoUri = storeLogoUri,
+                    onRefresh = onRefresh,
+                    onBackClick = onBackClick,
+                )
             },
             bottomBar = {
                 KasirBottomBar(
@@ -172,7 +179,9 @@ fun TransactionHistoryScreen(
 
 @Composable
 private fun HistoryTopBar(
+    logoUri: String?,
     onRefresh: () -> Unit,
+    onBackClick: (() -> Unit)?,
 ) {
     Surface(
         color = CreamBackground,
@@ -186,7 +195,21 @@ private fun HistoryTopBar(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            KoperasiLogo()
+            if (onBackClick != null) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Kembali ke laporan",
+                        modifier = Modifier.size(26.dp),
+                        tint = Color(0xFF303A34),
+                    )
+                }
+            } else {
+                KoperasiLogo(logoUri = logoUri)
+            }
 
             Text(
                 text = "Riwayat",
