@@ -1014,221 +1014,419 @@ private fun PaymentSheetContent(
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         PanelHandle(onDismiss = onDismiss)
-        Text(
-            text = "Pembayaran",
-            color = Color(0xFF17221B),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-
-        OutlinedTextField(
-            value = uiState.buyerName,
-            onValueChange = onBuyerNameChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Nama pembeli untuk struk") },
-            placeholder = { Text("Contoh: Pak Budi") },
-            supportingText = {
-                Text(
-                    if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
-                        "Wajib diisi untuk transaksi hutang agar piutang bisa dilacak."
-                    } else {
-                        "Opsional, tapi sebaiknya diisi agar nama pembeli tampil di struk."
-                    },
-                )
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(14.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = DeepGreen,
-                unfocusedBorderColor = LineSoft,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                cursorColor = DeepGreen,
-            ),
-        )
-
-        if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
-            OutlinedTextField(
-                value = uiState.buyerContact,
-                onValueChange = onBuyerContactChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("No HP / alamat pembeli") },
-                placeholder = { Text("Opsional, untuk membedakan nama yang sama") },
-                supportingText = {
-                    Text("Opsional. Isi jika ada pembeli dengan nama mirip atau sama.")
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DeepGreen,
-                    unfocusedBorderColor = LineSoft,
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    cursorColor = DeepGreen,
-                ),
-            )
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, LineSoft),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Total Harga",
-                    modifier = Modifier.weight(1f),
-                    color = MutedText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = uiState.totalAmount.toRupiah(),
-                    color = DeepGreen,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-
-        Text(
-            text = "Metode Pembayaran",
-            color = Color(0xFF17221B),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            listOf(PaymentMethod.Cash, PaymentMethod.Qris, PaymentMethod.Debt).forEach { method ->
-                PaymentMethodButton(
-                    method = method,
-                    isSelected = uiState.selectedPaymentMethod == method,
-                    onClick = { onPaymentMethodSelected(method) },
-                    modifier = Modifier.weight(1f),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Pembayaran",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "${uiState.itemCount} item di keranjang",
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = FreshMint,
+            ) {
+                Text(
+                    text = uiState.selectedPaymentMethod.label,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
 
-        if (uiState.selectedPaymentMethod != PaymentMethod.Qris) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = uiState.paidAmountText,
-                    onValueChange = onPaidAmountChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("Uang dibayarkan") },
-                    prefix = { Text("Rp") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = DeepGreen,
-                        unfocusedBorderColor = LineSoft,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        cursorColor = DeepGreen,
-                    ),
-                )
-                Button(
-                    onClick = onUseExactAmount,
-                    enabled = uiState.selectedPaymentMethod == PaymentMethod.Cash,
-                    modifier = Modifier.height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = FreshMint,
-                        contentColor = DeepGreen,
-                        disabledContainerColor = SoftGray,
-                        disabledContentColor = MutedText,
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Text(
-                        text = "Uang Pas",
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                PaymentTotalCard(uiState = uiState)
             }
 
-            ChangeInfoCard(
-                uiState = uiState,
-            )
-
-            if (uiState.selectedPaymentMethod == PaymentMethod.Debt && uiState.paidAmount > 0L) {
-                Text(
-                    text = "Uang Muka Diterima Melalui",
-                    color = Color(0xFF17221B),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+            item {
+                PaymentSectionCard(
+                    title = "1. Data Pembeli",
+                    subtitle = if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                        "Nama wajib untuk hutang. Kontak/alamat boleh diisi agar tidak tertukar."
+                    } else {
+                        "Opsional, tapi berguna agar nama pembeli tampil di struk."
+                    },
                 ) {
-                    DebtInitialPaymentMethod.entries.forEach { method ->
-                        DebtInitialPaymentMethodButton(
-                            method = method,
-                            isSelected = uiState.selectedDebtInitialPaymentMethod == method,
-                            onClick = { onDebtInitialPaymentMethodSelected(method) },
-                            modifier = Modifier.weight(1f),
+                    OutlinedTextField(
+                        value = uiState.buyerName,
+                        onValueChange = onBuyerNameChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nama pembeli") },
+                        placeholder = { Text("Contoh: Pak Budi") },
+                        supportingText = {
+                            Text(
+                                if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                                    "Wajib diisi untuk transaksi hutang."
+                                } else {
+                                    "Boleh dikosongkan untuk pembeli umum."
+                                },
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = paymentTextFieldColors(),
+                    )
+
+                    if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                        OutlinedTextField(
+                            value = uiState.buyerContact,
+                            onValueChange = onBuyerContactChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("No HP / alamat pembeli") },
+                            placeholder = { Text("Opsional") },
+                            supportingText = {
+                                Text("Isi jika ada nama pembeli yang mirip atau sama.")
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = paymentTextFieldColors(),
                         )
                     }
                 }
             }
+
+            item {
+                PaymentSectionCard(
+                    title = "2. Metode Pembayaran",
+                    subtitle = when (uiState.selectedPaymentMethod) {
+                        PaymentMethod.Cash -> "Pilih Cash jika pembeli membayar tunai."
+                        PaymentMethod.Qris -> "Pilih QRIS jika pembayaran sudah masuk lewat QR."
+                        PaymentMethod.Debt -> "Pilih Hutang jika pembeli belum membayar penuh."
+                    },
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(PaymentMethod.Cash, PaymentMethod.Qris, PaymentMethod.Debt).forEach { method ->
+                            PaymentMethodButton(
+                                method = method,
+                                isSelected = uiState.selectedPaymentMethod == method,
+                                onClick = { onPaymentMethodSelected(method) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (uiState.selectedPaymentMethod != PaymentMethod.Qris) {
+                item {
+                    PaymentSectionCard(
+                        title = if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                            "3. Uang Muka"
+                        } else {
+                            "3. Uang Diterima"
+                        },
+                        subtitle = if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                            "Boleh kosong. Jika pembeli membayar sebagian, isi nominal uang muka."
+                        } else {
+                            "Isi uang yang diterima dari pembeli. Gunakan Uang Pas jika nominalnya sama."
+                        },
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = uiState.paidAmountText,
+                                onValueChange = onPaidAmountChange,
+                                modifier = Modifier.weight(1f),
+                                label = {
+                                    Text(
+                                        if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                                            "Nominal uang muka"
+                                        } else {
+                                            "Uang dibayarkan"
+                                        },
+                                    )
+                                },
+                                prefix = { Text("Rp") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = paymentTextFieldColors(),
+                            )
+                            Button(
+                                onClick = onUseExactAmount,
+                                enabled = uiState.selectedPaymentMethod == PaymentMethod.Cash,
+                                modifier = Modifier.height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = FreshMint,
+                                    contentColor = DeepGreen,
+                                    disabledContainerColor = SoftGray,
+                                    disabledContentColor = MutedText,
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
+                                Text(
+                                    text = "Uang Pas",
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+
+                        ChangeInfoCard(uiState = uiState)
+
+                        if (uiState.selectedPaymentMethod == PaymentMethod.Debt && uiState.paidAmount > 0L) {
+                            Text(
+                                text = "Uang muka diterima melalui",
+                                color = Color(0xFF17221B),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                DebtInitialPaymentMethod.entries.forEach { method ->
+                                    DebtInitialPaymentMethodButton(
+                                        method = method,
+                                        isSelected = uiState.selectedDebtInitialPaymentMethod == method,
+                                        onClick = { onDebtInitialPaymentMethodSelected(method) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                item {
+                    PaymentQrisInfoCard(totalAmount = uiState.totalAmount)
+                }
+            }
+
+            uiState.errorMessage?.let { message ->
+                item {
+                    MessageCard(
+                        message = message,
+                        isError = true,
+                    )
+                }
+            }
         }
 
-        uiState.errorMessage?.let { message ->
-            MessageCard(
-                message = message,
-                isError = true,
-            )
-        }
+        PaymentActionBar(
+            isSaving = uiState.isSaving,
+            onBackToCart = onBackToCart,
+            onCompleteTransaction = onCompleteTransaction,
+        )
+    }
+}
 
+@Composable
+private fun PaymentTotalCard(
+    uiState: TransactionUiState,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DeepGreen),
+        shape = RoundedCornerShape(22.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
-                onClick = onBackToCart,
-                modifier = Modifier.weight(1f).height(52.dp),
-                shape = RoundedCornerShape(16.dp),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "Keranjang",
+                    text = "Total yang harus dibayar",
+                    color = Color.White.copy(alpha = 0.78f),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = uiState.totalAmount.toRupiah(),
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Button(
-                onClick = onCompleteTransaction,
-                enabled = !uiState.isSaving,
-                modifier = Modifier.weight(1f).height(52.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DeepGreen,
-                    contentColor = Color.White,
-                ),
-                shape = RoundedCornerShape(16.dp),
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White.copy(alpha = 0.16f),
             ) {
                 Text(
-                    text = if (uiState.isSaving) "Menyimpan..." else "Simpan",
+                    text = "${uiState.itemCount} item",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }
         }
     }
 }
+
+@Composable
+private fun PaymentSectionCard(
+    title: String,
+    subtitle: String,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = title,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = subtitle,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PaymentQrisInfoCard(
+    totalAmount: Long,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, FreshMint),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(FreshMint, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCodeScanner,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "Pembayaran QRIS",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Pastikan pembayaran sebesar ${totalAmount.toRupiah()} sudah masuk sebelum disimpan.",
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentActionBar(
+    isSaving: Boolean,
+    onBackToCart: () -> Unit,
+    onCompleteTransaction: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        OutlinedButton(
+            onClick = onBackToCart,
+            modifier = Modifier.weight(1f).height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(
+                text = "Keranjang",
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Button(
+            onClick = onCompleteTransaction,
+            enabled = !isSaving,
+            modifier = Modifier.weight(1f).height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = DeepGreen,
+                contentColor = Color.White,
+            ),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(
+                text = if (isSaving) "Menyimpan..." else "Simpan",
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun paymentTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = DeepGreen,
+    unfocusedBorderColor = LineSoft,
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    cursorColor = DeepGreen,
+)
 
 @Composable
 private fun PanelHandle(
@@ -1281,6 +1479,7 @@ private fun PaymentMethodButton(
         border = BorderStroke(1.dp, if (isSelected) DeepGreen else LineSoft),
         shape = RoundedCornerShape(14.dp),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
     ) {
         val icon = when (method) {
             PaymentMethod.Cash -> Icons.Outlined.AttachMoney
@@ -1291,13 +1490,14 @@ private fun PaymentMethodButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(16.dp),
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = method.label,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            overflow = TextOverflow.Clip,
         )
     }
 }
