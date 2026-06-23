@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -91,6 +92,7 @@ import com.kasirkoperasi.app.core.printer.ReceiptPrintData
 import com.kasirkoperasi.app.core.printer.ReceiptPrintItem
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.MoneyInputField
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.feature.transaction.state.CartItem
 import com.kasirkoperasi.app.feature.transaction.state.DebtInitialPaymentMethod
@@ -890,6 +892,7 @@ private fun CartSheetContent(
             .fillMaxSize()
             .fillMaxWidth()
             .navigationBarsPadding()
+            .imePadding()
             .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -1151,48 +1154,35 @@ private fun PaymentSheetContent(
                             "Isi uang yang diterima dari pembeli. Gunakan Uang Pas jika nominalnya sama."
                         },
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = uiState.paidAmountText,
-                                onValueChange = onPaidAmountChange,
-                                modifier = Modifier.weight(1f),
-                                label = {
+                        MoneyInputField(
+                            value = uiState.paidAmountText,
+                            onValueChange = onPaidAmountChange,
+                            label = if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                                "Nominal uang muka"
+                            } else {
+                                "Uang dibayarkan"
+                            },
+                            leadingIcon = { Text("Rp") },
+                            trailingContent = {
+                                Button(
+                                    onClick = onUseExactAmount,
+                                    enabled = uiState.selectedPaymentMethod == PaymentMethod.Cash,
+                                    modifier = Modifier.height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = FreshMint,
+                                        contentColor = DeepGreen,
+                                        disabledContainerColor = SoftGray,
+                                        disabledContentColor = MutedText,
+                                    ),
+                                    shape = RoundedCornerShape(14.dp),
+                                ) {
                                     Text(
-                                        if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
-                                            "Nominal uang muka"
-                                        } else {
-                                            "Uang dibayarkan"
-                                        },
+                                        text = "Uang Pas",
+                                        fontWeight = FontWeight.Bold,
                                     )
-                                },
-                                prefix = { Text("Rp") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = paymentTextFieldColors(),
-                            )
-                            Button(
-                                onClick = onUseExactAmount,
-                                enabled = uiState.selectedPaymentMethod == PaymentMethod.Cash,
-                                modifier = Modifier.height(56.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = FreshMint,
-                                    contentColor = DeepGreen,
-                                    disabledContainerColor = SoftGray,
-                                    disabledContentColor = MutedText,
-                                ),
-                                shape = RoundedCornerShape(14.dp),
-                            ) {
-                                Text(
-                                    text = "Uang Pas",
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
+                                }
+                            },
+                        )
 
                         ChangeInfoCard(uiState = uiState)
 

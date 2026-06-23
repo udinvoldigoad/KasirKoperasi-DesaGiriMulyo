@@ -87,6 +87,7 @@ import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.MoneyInputField
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.ProductCategory
 import com.kasirkoperasi.app.feature.product.state.ProductUiState
@@ -280,6 +281,7 @@ private fun ProductListScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .imePadding()
                     .padding(innerPadding),
                 contentPadding = PaddingValues(
                     start = 16.dp,
@@ -397,6 +399,7 @@ private fun ProductFormScreen(
     var stockQuantity by rememberSaveable { mutableStateOf("") }
     var imageUri by rememberSaveable { mutableStateOf("") }
     var isImageSourcePanelVisible by remember { mutableStateOf(false) }
+    var activeMoneyInput by rememberSaveable { mutableStateOf<String?>(null) }
     val imagePickerActions = rememberProductImagePicker(
         onImageSaved = { imageUri = it },
     )
@@ -536,28 +539,32 @@ private fun ProductFormScreen(
             }
 
             item {
-                KasirTextField(
+                MoneyInputField(
                     value = purchasePrice,
                     onValueChange = {
                         purchasePrice = it.toGroupedNumberInput()
                         onClearMessage()
                     },
                     label = "Harga Beli",
-                    leading = { MoneyLineIcon() },
-                    keyboardType = KeyboardType.Number,
+                    leadingIcon = { MoneyLineIcon() },
+                    inputId = "product_add_purchase_price",
+                    activeInputId = activeMoneyInput,
+                    onActiveInputChange = { activeMoneyInput = it },
                 )
             }
 
             item {
-                KasirTextField(
+                MoneyInputField(
                     value = sellingPrice,
                     onValueChange = {
                         sellingPrice = it.toGroupedNumberInput()
                         onClearMessage()
                     },
                     label = "Harga Jual*",
-                    leading = { MoneyLineIcon() },
-                    keyboardType = KeyboardType.Number,
+                    leadingIcon = { MoneyLineIcon() },
+                    inputId = "product_add_selling_price",
+                    activeInputId = activeMoneyInput,
+                    onActiveInputChange = { activeMoneyInput = it },
                 )
             }
 
@@ -632,6 +639,7 @@ private fun ProductEditSheet(
     var imageUri by rememberSaveable(product.id) { mutableStateOf(product.imageUri.orEmpty()) }
     var showDeleteConfirm by rememberSaveable(product.id) { mutableStateOf(false) }
     var isImageSourcePanelVisible by remember { mutableStateOf(false) }
+    var activeMoneyInput by rememberSaveable(product.id) { mutableStateOf<String?>(null) }
     val imagePickerActions = rememberProductImagePicker(
         onImageSaved = { imageUri = it },
     )
@@ -732,7 +740,7 @@ private fun ProductEditSheet(
                     }
 
                     item {
-                        LabeledKasirTextField(
+                        LabeledMoneyInputField(
                             title = "Harga Beli",
                             value = purchasePrice,
                             onValueChange = {
@@ -741,12 +749,14 @@ private fun ProductEditSheet(
                             },
                             label = "Harga Beli",
                             leading = { MoneyLineIcon() },
-                            keyboardType = KeyboardType.Number,
+                            inputId = "product_edit_purchase_price",
+                            activeInputId = activeMoneyInput,
+                            onActiveInputChange = { activeMoneyInput = it },
                         )
                     }
 
                     item {
-                        LabeledKasirTextField(
+                        LabeledMoneyInputField(
                             title = "Harga Jual",
                             value = sellingPrice,
                             onValueChange = {
@@ -755,7 +765,9 @@ private fun ProductEditSheet(
                             },
                             label = "Harga Jual*",
                             leading = { MoneyLineIcon() },
-                            keyboardType = KeyboardType.Number,
+                            inputId = "product_edit_selling_price",
+                            activeInputId = activeMoneyInput,
+                            onActiveInputChange = { activeMoneyInput = it },
                         )
                     }
 
@@ -1551,6 +1563,38 @@ private fun LabeledKasirTextField(
             label = label,
             leading = leading,
             keyboardType = keyboardType,
+        )
+    }
+}
+
+@Composable
+private fun LabeledMoneyInputField(
+    title: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    leading: (@Composable () -> Unit)? = null,
+    inputId: String,
+    activeInputId: String?,
+    onActiveInputChange: (String?) -> Unit,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            color = DeepGreen,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        MoneyInputField(
+            value = value,
+            onValueChange = onValueChange,
+            label = label,
+            leadingIcon = leading,
+            inputId = inputId,
+            activeInputId = activeInputId,
+            onActiveInputChange = onActiveInputChange,
         )
     }
 }
