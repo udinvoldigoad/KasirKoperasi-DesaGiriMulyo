@@ -7,6 +7,7 @@ import com.kasirkoperasi.app.domain.model.SalesTransactionDraftItem
 import com.kasirkoperasi.app.domain.model.SalesTransactionPayment
 import com.kasirkoperasi.app.domain.usecase.CompleteSalesTransactionUseCase
 import com.kasirkoperasi.app.feature.transaction.state.CartItem
+import com.kasirkoperasi.app.feature.transaction.state.DebtInitialPaymentMethod
 import com.kasirkoperasi.app.feature.transaction.state.PaymentMethod
 import com.kasirkoperasi.app.feature.transaction.state.TransactionUiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,10 +165,30 @@ class TransactionViewModel(
         }
     }
 
+    fun updateBuyerContact(contact: String) {
+        _uiState.update {
+            it.copy(
+                buyerContact = contact,
+                errorMessage = null,
+                successMessage = null,
+            )
+        }
+    }
+
     fun selectPaymentMethod(method: PaymentMethod) {
         _uiState.update {
             it.copy(
                 selectedPaymentMethod = method,
+                errorMessage = null,
+                successMessage = null,
+            )
+        }
+    }
+
+    fun selectDebtInitialPaymentMethod(method: DebtInitialPaymentMethod) {
+        _uiState.update {
+            it.copy(
+                selectedDebtInitialPaymentMethod = method,
                 errorMessage = null,
                 successMessage = null,
             )
@@ -211,6 +232,20 @@ class TransactionViewModel(
             return
         }
 
+        if (currentState.selectedPaymentMethod == PaymentMethod.Debt &&
+            currentState.buyerName.isBlank()
+        ) {
+            _uiState.update { it.copy(errorMessage = "Nama pembeli wajib diisi untuk transaksi hutang") }
+            return
+        }
+
+        if (currentState.selectedPaymentMethod == PaymentMethod.Debt &&
+            currentState.paidAmount >= currentState.totalAmount
+        ) {
+            _uiState.update { it.copy(errorMessage = "Transaksi sudah lunas. Gunakan metode Cash atau QRIS.") }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -231,14 +266,28 @@ class TransactionViewModel(
             } else {
                 currentState.paidAmount
             }
+            val paidPaymentMethod = when {
+                currentState.selectedPaymentMethod == PaymentMethod.Cash -> PaymentMethod.Cash.label
+                currentState.selectedPaymentMethod == PaymentMethod.Qris -> PaymentMethod.Qris.label
+                currentState.selectedPaymentMethod == PaymentMethod.Debt && paidAmount > 0L -> {
+                    currentState.selectedDebtInitialPaymentMethod.label
+                }
+                else -> ""
+            }
 
             runCatching {
                 completeSalesTransactionUseCase(
                     items = draftItems,
                     payment = SalesTransactionPayment(
                         buyerName = currentState.buyerName,
+                        buyerContact = if (currentState.selectedPaymentMethod == PaymentMethod.Debt) {
+                            currentState.buyerContact
+                        } else {
+                            ""
+                        },
                         paymentMethod = currentState.selectedPaymentMethod.label,
                         paidAmount = paidAmount,
+                        paidPaymentMethod = paidPaymentMethod,
                     ),
                 )
             }.onSuccess {
@@ -248,11 +297,17 @@ class TransactionViewModel(
                 } else {
                     0L
                 }
+                val completedDebtAmount = if (currentState.selectedPaymentMethod == PaymentMethod.Debt) {
+                    (currentState.totalAmount - completedPaidAmount).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
 
                 _uiState.update {
                     it.copy(
                         cartItems = emptyList(),
                         buyerName = "",
+                        buyerContact = "",
                         selectedPaymentMethod = PaymentMethod.Cash,
                         paidAmountText = "",
                         isSaving = false,
@@ -260,8 +315,10 @@ class TransactionViewModel(
                         completedTotalAmount = currentState.totalAmount,
                         completedBuyerName = currentState.buyerName.trim(),
                         completedPaymentMethod = currentState.selectedPaymentMethod.label,
+                        completedPaidPaymentMethod = paidPaymentMethod,
                         completedPaidAmount = completedPaidAmount,
                         completedChangeAmount = completedChangeAmount,
+                        completedDebtAmount = completedDebtAmount,
                         successMessage = "Transaksi berhasil disimpan",
                     )
                 }
@@ -284,8 +341,10 @@ class TransactionViewModel(
                 completedTotalAmount = 0L,
                 completedBuyerName = "",
                 completedPaymentMethod = PaymentMethod.Cash.label,
+                completedPaidPaymentMethod = PaymentMethod.Cash.label,
                 completedPaidAmount = 0L,
                 completedChangeAmount = 0L,
+                completedDebtAmount = 0L,
                 successMessage = null,
             )
         }

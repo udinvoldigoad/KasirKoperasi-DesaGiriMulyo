@@ -21,6 +21,9 @@ data class TransactionHistoryUiState(
 
     val totalItems: Int
         get() = transactions.sumOf { it.itemCount }
+
+    val totalDebt: Long
+        get() = transactions.sumOf { it.debtAmount }
 }
 
 enum class TransactionHistoryRange(

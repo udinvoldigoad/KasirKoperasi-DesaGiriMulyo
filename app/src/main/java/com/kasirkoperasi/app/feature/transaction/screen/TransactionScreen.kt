@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -92,6 +93,7 @@ import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.feature.transaction.state.CartItem
+import com.kasirkoperasi.app.feature.transaction.state.DebtInitialPaymentMethod
 import com.kasirkoperasi.app.feature.transaction.state.PaymentMethod
 import com.kasirkoperasi.app.feature.transaction.state.TransactionUiState
 import com.kasirkoperasi.app.ui.theme.CreamBackground
@@ -120,7 +122,9 @@ fun TransactionScreen(
     onDecreaseQuantity: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onBuyerNameChange: (String) -> Unit,
+    onBuyerContactChange: (String) -> Unit,
     onPaymentMethodSelected: (PaymentMethod) -> Unit,
+    onDebtInitialPaymentMethodSelected: (DebtInitialPaymentMethod) -> Unit,
     onPaidAmountChange: (String) -> Unit,
     onUseExactAmount: () -> Unit,
     onCompleteTransaction: () -> Unit,
@@ -398,7 +402,9 @@ fun TransactionScreen(
                             PaymentSheetContent(
                                 uiState = uiState,
                                 onBuyerNameChange = onBuyerNameChange,
+                                onBuyerContactChange = onBuyerContactChange,
                                 onPaymentMethodSelected = onPaymentMethodSelected,
+                                onDebtInitialPaymentMethodSelected = onDebtInitialPaymentMethodSelected,
                                 onPaidAmountChange = onPaidAmountChange,
                                 onUseExactAmount = onUseExactAmount,
                                 onBackToCart = {
@@ -433,8 +439,10 @@ fun TransactionScreen(
                 items = uiState.completedItems,
                 buyerName = uiState.completedBuyerName,
                 paymentMethod = uiState.completedPaymentMethod,
+                paidPaymentMethod = uiState.completedPaidPaymentMethod,
                 paidAmount = uiState.completedPaidAmount,
                 changeAmount = uiState.completedChangeAmount,
+                debtAmount = uiState.completedDebtAmount,
                 totalAmount = uiState.completedTotalAmount,
                 isPrinting = isPrintingReceipt,
                 printMessage = printMessage,
@@ -474,8 +482,10 @@ private fun TransactionSuccessDialog(
     items: List<CartItem>,
     buyerName: String,
     paymentMethod: String,
+    paidPaymentMethod: String,
     paidAmount: Long,
     changeAmount: Long,
+    debtAmount: Long,
     totalAmount: Long,
     isPrinting: Boolean,
     printMessage: String?,
@@ -540,8 +550,10 @@ private fun TransactionSuccessDialog(
                     items = items,
                     buyerName = buyerName,
                     paymentMethod = paymentMethod,
+                    paidPaymentMethod = paidPaymentMethod,
                     paidAmount = paidAmount,
                     changeAmount = changeAmount,
+                    debtAmount = debtAmount,
                     totalAmount = totalAmount,
                 )
 
@@ -606,8 +618,10 @@ private fun TransactionSuccessDetail(
     items: List<CartItem>,
     buyerName: String,
     paymentMethod: String,
+    paidPaymentMethod: String,
     paidAmount: Long,
     changeAmount: Long,
+    debtAmount: Long,
     totalAmount: Long,
 ) {
     Surface(
@@ -656,7 +670,10 @@ private fun TransactionSuccessDetail(
 
             SuccessSummaryRow(
                 label = "Pembayaran",
-                value = paymentMethod,
+                value = paymentMethod.toPaymentLabel(
+                    paidPaymentMethod = paidPaymentMethod,
+                    paidAmount = paidAmount,
+                ),
             )
 
             Row(
@@ -685,10 +702,17 @@ private fun TransactionSuccessDetail(
                 value = paidAmount.toRupiah(),
             )
 
-            SuccessSummaryRow(
-                label = "Kembalian",
-                value = changeAmount.toRupiah(),
-            )
+            if (debtAmount > 0L) {
+                SuccessSummaryRow(
+                    label = "Sisa Hutang",
+                    value = debtAmount.toRupiah(),
+                )
+            } else {
+                SuccessSummaryRow(
+                    label = "Kembalian",
+                    value = changeAmount.toRupiah(),
+                )
+            }
         }
     }
 }
@@ -975,7 +999,9 @@ private fun CartTotalCard(
 private fun PaymentSheetContent(
     uiState: TransactionUiState,
     onBuyerNameChange: (String) -> Unit,
+    onBuyerContactChange: (String) -> Unit,
     onPaymentMethodSelected: (PaymentMethod) -> Unit,
+    onDebtInitialPaymentMethodSelected: (DebtInitialPaymentMethod) -> Unit,
     onPaidAmountChange: (String) -> Unit,
     onUseExactAmount: () -> Unit,
     onBackToCart: () -> Unit,
@@ -1005,7 +1031,13 @@ private fun PaymentSheetContent(
             label = { Text("Nama pembeli untuk struk") },
             placeholder = { Text("Contoh: Pak Budi") },
             supportingText = {
-                Text("Opsional, tapi sebaiknya diisi agar nama pembeli tampil di struk.")
+                Text(
+                    if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+                        "Wajib diisi untuk transaksi hutang agar piutang bisa dilacak."
+                    } else {
+                        "Opsional, tapi sebaiknya diisi agar nama pembeli tampil di struk."
+                    },
+                )
             },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
@@ -1017,6 +1049,28 @@ private fun PaymentSheetContent(
                 cursorColor = DeepGreen,
             ),
         )
+
+        if (uiState.selectedPaymentMethod == PaymentMethod.Debt) {
+            OutlinedTextField(
+                value = uiState.buyerContact,
+                onValueChange = onBuyerContactChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("No HP / alamat pembeli") },
+                placeholder = { Text("Opsional, untuk membedakan nama yang sama") },
+                supportingText = {
+                    Text("Opsional. Isi jika ada pembeli dengan nama mirip atau sama.")
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = DeepGreen,
+                    unfocusedBorderColor = LineSoft,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    cursorColor = DeepGreen,
+                ),
+            )
+        }
 
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1056,7 +1110,7 @@ private fun PaymentSheetContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf(PaymentMethod.Cash, PaymentMethod.Qris).forEach { method ->
+            listOf(PaymentMethod.Cash, PaymentMethod.Qris, PaymentMethod.Debt).forEach { method ->
                 PaymentMethodButton(
                     method = method,
                     isSelected = uiState.selectedPaymentMethod == method,
@@ -1066,7 +1120,7 @@ private fun PaymentSheetContent(
             }
         }
 
-        if (uiState.selectedPaymentMethod == PaymentMethod.Cash) {
+        if (uiState.selectedPaymentMethod != PaymentMethod.Qris) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1091,10 +1145,13 @@ private fun PaymentSheetContent(
                 )
                 Button(
                     onClick = onUseExactAmount,
+                    enabled = uiState.selectedPaymentMethod == PaymentMethod.Cash,
                     modifier = Modifier.height(56.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = FreshMint,
                         contentColor = DeepGreen,
+                        disabledContainerColor = SoftGray,
+                        disabledContentColor = MutedText,
                     ),
                     shape = RoundedCornerShape(14.dp),
                 ) {
@@ -1108,6 +1165,29 @@ private fun PaymentSheetContent(
             ChangeInfoCard(
                 uiState = uiState,
             )
+
+            if (uiState.selectedPaymentMethod == PaymentMethod.Debt && uiState.paidAmount > 0L) {
+                Text(
+                    text = "Uang Muka Diterima Melalui",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    DebtInitialPaymentMethod.entries.forEach { method ->
+                        DebtInitialPaymentMethodButton(
+                            method = method,
+                            isSelected = uiState.selectedDebtInitialPaymentMethod == method,
+                            onClick = { onDebtInitialPaymentMethodSelected(method) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
 
         uiState.errorMessage?.let { message ->
@@ -1205,10 +1285,47 @@ private fun PaymentMethodButton(
         val icon = when (method) {
             PaymentMethod.Cash -> Icons.Outlined.AttachMoney
             PaymentMethod.Qris -> Icons.Outlined.QrCodeScanner
+            PaymentMethod.Debt -> Icons.Outlined.CreditCard
         }
 
         Icon(
             imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = method.label,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun DebtInitialPaymentMethodButton(
+    method: DebtInitialPaymentMethod,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) DeepGreen else Color.White,
+            contentColor = if (isSelected) Color.White else DeepGreen,
+        ),
+        border = BorderStroke(1.dp, if (isSelected) DeepGreen else LineSoft),
+        shape = RoundedCornerShape(14.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+    ) {
+        Icon(
+            imageVector = if (method == DebtInitialPaymentMethod.Qris) {
+                Icons.Outlined.QrCodeScanner
+            } else {
+                Icons.Outlined.AttachMoney
+            },
             contentDescription = null,
             modifier = Modifier.size(18.dp),
         )
@@ -1227,9 +1344,18 @@ private fun ChangeInfoCard(
 ) {
     val isCashShort = uiState.selectedPaymentMethod == PaymentMethod.Cash &&
         uiState.paidAmount in 1 until uiState.totalAmount
-    val title = if (isCashShort) "Uang Kurang" else "Kembalian"
-    val amount = if (isCashShort) uiState.totalAmount - uiState.paidAmount else uiState.changeAmount
-    val color = if (isCashShort) MaterialTheme.colorScheme.error else DeepGreen
+    val isDebt = uiState.selectedPaymentMethod == PaymentMethod.Debt
+    val title = when {
+        isDebt -> "Sisa Hutang"
+        isCashShort -> "Uang Kurang"
+        else -> "Kembalian"
+    }
+    val amount = when {
+        isDebt -> uiState.debtAmount
+        isCashShort -> uiState.totalAmount - uiState.paidAmount
+        else -> uiState.changeAmount
+    }
+    val color = if (isCashShort || isDebt) MaterialTheme.colorScheme.error else DeepGreen
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1745,13 +1871,30 @@ private fun Long.toRupiah(): String {
     return "Rp$grouped"
 }
 
+private fun String.toPaymentLabel(
+    paidPaymentMethod: String,
+    paidAmount: Long,
+): String {
+    return if (
+        equals("Hutang", ignoreCase = true) &&
+        paidAmount > 0L &&
+        paidPaymentMethod.isNotBlank()
+    ) {
+        "$this / uang muka $paidPaymentMethod"
+    } else {
+        this
+    }
+}
+
 private fun TransactionUiState.toReceiptPrintData(storeName: String): ReceiptPrintData {
     return ReceiptPrintData(
         storeName = storeName,
         buyerName = completedBuyerName,
         paymentMethod = completedPaymentMethod,
+        paidPaymentMethod = completedPaidPaymentMethod,
         paidAmount = completedPaidAmount,
         changeAmount = completedChangeAmount,
+        debtAmount = completedDebtAmount,
         totalAmount = completedTotalAmount,
         items = completedItems.map { item ->
             ReceiptPrintItem(

@@ -9,9 +9,13 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.kasirkoperasi.app.core.settings.StoreProfileStore
+import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
+import com.kasirkoperasi.app.domain.model.DebtPayment
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
+import com.kasirkoperasi.app.domain.model.StockMovement
+import com.kasirkoperasi.app.domain.model.StockMovementType
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -23,6 +27,9 @@ data class TransactionReportPdfData(
     val transactions: List<SalesTransaction>,
     val itemsByTransactionId: Map<Long, List<SalesTransactionItem>>,
     val stockProducts: List<Product>,
+    val debtPayments: List<DebtPayment>,
+    val debtCustomers: List<DebtCustomerSummary>,
+    val stockMovements: List<StockMovement>,
     val exportedAtMillis: Long = System.currentTimeMillis(),
 )
 
@@ -30,7 +37,12 @@ class TransactionReportPdfExporter(
     private val context: Context,
 ) {
     fun export(data: TransactionReportPdfData): Uri {
-        require(data.transactions.isNotEmpty() || data.stockProducts.isNotEmpty()) {
+        require(
+            data.transactions.isNotEmpty() ||
+                data.stockProducts.isNotEmpty() ||
+                data.debtPayments.isNotEmpty() ||
+                data.stockMovements.isNotEmpty(),
+        ) {
             "Tidak ada data untuk diexport"
         }
 
@@ -113,6 +125,13 @@ private class PdfRenderer(
         drawReportHeader(data)
         drawSummary(data)
         drawTransactionSection(data)
+        drawDebtTransactionSection(data.transactions.filter { it.debtAmount > 0L })
+        drawDebtPaymentSection(data.debtPayments)
+        drawDebtCustomerSection(data.debtCustomers)
+        drawStockMovementSection(
+            stockMovements = data.stockMovements,
+            productNameById = data.stockProducts.associate { it.id to it.name },
+        )
         drawStockSection(data.stockProducts)
 
         finishPage()
@@ -148,40 +167,77 @@ private class PdfRenderer(
         val totalSales = data.transactions.sumOf { it.totalAmount }
         val totalProfit = data.transactions.sumOf { it.totalProfit }
         val totalItems = data.transactions.sumOf { it.itemCount }
-        val totalTransactions = data.transactions.size
+        val totalCash = data.transactions.sumOf { transaction ->
+            if (transaction.paidPaymentMethod.equals("Cash", ignoreCase = true)) {
+                    transaction.paidAmount - transaction.changeAmount
+            } else {
+                0L
+            }
+        } + data.debtPayments
+            .filter { it.paymentMethod.equals("Cash", ignoreCase = true) }
+            .sumOf { it.amount }
+        val totalQris = data.transactions
+            .filter { it.paidPaymentMethod.equals("QRIS", ignoreCase = true) }
+            .sumOf { it.paidAmount } + data.debtPayments
+            .filter { it.paymentMethod.equals("QRIS", ignoreCase = true) }
+            .sumOf { it.amount }
+        val totalDebt = data.transactions.sumOf { it.debtAmount }
+        val totalDebtPayment = data.debtPayments.sumOf { it.amount }
 
         drawSummaryBox(
             x = MARGIN_LEFT,
+            width = SUMMARY_BOX_WIDTH,
             title = "Total Penjualan",
             value = totalSales.toRupiah(),
         )
         drawSummaryBox(
-            x = MARGIN_LEFT + 190f,
+            x = MARGIN_LEFT + SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP,
+            width = SUMMARY_BOX_WIDTH,
             title = "Total Profit",
             value = totalProfit.toRupiah(),
         )
         drawSummaryBox(
-            x = MARGIN_LEFT + 380f,
-            title = "Transaksi",
-            value = totalTransactions.toString(),
-        )
-        drawSummaryBox(
-            x = MARGIN_LEFT + 570f,
+            x = MARGIN_LEFT + ((SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP) * 2),
+            width = SUMMARY_BOX_WIDTH,
             title = "Item Terjual",
             value = totalItems.toString(),
         )
-        y += 54f
+        drawSummaryBox(
+            x = MARGIN_LEFT,
+            width = SUMMARY_BOX_WIDTH,
+            title = "Total Cash",
+            value = totalCash.toRupiah(),
+            yOffset = 50f,
+        )
+        drawSummaryBox(
+            x = MARGIN_LEFT + SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP,
+            width = SUMMARY_BOX_WIDTH,
+            title = "Total QRIS",
+            value = totalQris.toRupiah(),
+            yOffset = 50f,
+        )
+        drawSummaryBox(
+            x = MARGIN_LEFT + ((SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP) * 2),
+            width = SUMMARY_BOX_WIDTH,
+            title = "Hutang / Pelunasan",
+            value = "${totalDebt.toRupiah()} / ${totalDebtPayment.toRupiah()}",
+            yOffset = 50f,
+        )
+        y += 104f
     }
 
     private fun drawSummaryBox(
         x: Float,
+        width: Float,
         title: String,
         value: String,
+        yOffset: Float = 0f,
     ) {
+        val top = y + yOffset
         fillPaint.color = Color.rgb(247, 248, 247)
-        canvas.drawRoundRect(x, y, x + 170f, y + 42f, 8f, 8f, fillPaint)
-        canvas.drawText(title, x + 10f, y + 16f, subtitlePaint)
-        canvas.drawText(value, x + 10f, y + 32f, sectionPaint)
+        canvas.drawRoundRect(x, top, x + width, top + 42f, 8f, 8f, fillPaint)
+        canvas.drawText(title, x + 10f, top + 16f, subtitlePaint)
+        canvas.drawText(value.ellipsize(width - 20f, sectionPaint), x + 10f, top + 32f, sectionPaint)
     }
 
     private fun drawTransactionSection(data: TransactionReportPdfData) {
@@ -220,7 +276,7 @@ private class PdfRenderer(
     }
 
     private fun drawStockSection(products: List<Product>) {
-        drawSectionTitle("Laporan Stok Barang")
+        drawSectionTitle("Laporan Stok Saat Ini")
         drawStockTableHeader()
 
         if (products.isEmpty()) {
@@ -234,6 +290,90 @@ private class PdfRenderer(
                 product = product,
             )
         }
+    }
+
+    private fun drawDebtTransactionSection(transactions: List<SalesTransaction>) {
+        drawSectionTitle("Daftar Transaksi Hutang")
+        drawDebtTransactionTableHeader()
+
+        if (transactions.isEmpty()) {
+            drawEmptyTableMessage("Belum ada transaksi hutang pada periode ini.")
+            y += 10f
+            return
+        }
+
+        transactions.forEachIndexed { index, transaction ->
+            drawDebtTransactionRow(
+                rowNumber = index + 1,
+                transaction = transaction,
+            )
+        }
+
+        y += 18f
+    }
+
+    private fun drawDebtPaymentSection(payments: List<DebtPayment>) {
+        drawSectionTitle("Daftar Pembayaran Hutang")
+        drawDebtPaymentTableHeader()
+
+        if (payments.isEmpty()) {
+            drawEmptyTableMessage("Belum ada pembayaran hutang pada periode ini.")
+            y += 10f
+            return
+        }
+
+        payments.forEachIndexed { index, payment ->
+            drawDebtPaymentRow(
+                rowNumber = index + 1,
+                payment = payment,
+            )
+        }
+
+        y += 18f
+    }
+
+    private fun drawDebtCustomerSection(customers: List<DebtCustomerSummary>) {
+        drawSectionTitle("Sisa Hutang Per Pembeli")
+        drawDebtCustomerTableHeader()
+
+        if (customers.isEmpty()) {
+            drawEmptyTableMessage("Tidak ada sisa hutang aktif.")
+            y += 10f
+            return
+        }
+
+        customers.forEachIndexed { index, customer ->
+            drawDebtCustomerRow(
+                rowNumber = index + 1,
+                customer = customer,
+            )
+        }
+
+        y += 18f
+    }
+
+    private fun drawStockMovementSection(
+        stockMovements: List<StockMovement>,
+        productNameById: Map<Long, String>,
+    ) {
+        drawSectionTitle("Keluar Masuk Stok Barang")
+        drawStockMovementTableHeader()
+
+        if (stockMovements.isEmpty()) {
+            drawEmptyTableMessage("Belum ada mutasi stok pada periode ini.")
+            y += 10f
+            return
+        }
+
+        stockMovements.forEachIndexed { index, movement ->
+            drawStockMovementRow(
+                rowNumber = index + 1,
+                movement = movement,
+                productName = productNameById[movement.productId] ?: "Barang #${movement.productId}",
+            )
+        }
+
+        y += 18f
     }
 
     private fun drawSectionTitle(title: String) {
@@ -282,6 +422,42 @@ private class PdfRenderer(
         y += TABLE_HEADER_HEIGHT
     }
 
+    private fun drawDebtTransactionTableHeader() {
+        drawHeaderRow(DEBT_TRANSACTION_TABLE_COLUMNS)
+    }
+
+    private fun drawDebtPaymentTableHeader() {
+        drawHeaderRow(DEBT_PAYMENT_TABLE_COLUMNS)
+    }
+
+    private fun drawDebtCustomerTableHeader() {
+        drawHeaderRow(DEBT_CUSTOMER_TABLE_COLUMNS)
+    }
+
+    private fun drawStockMovementTableHeader() {
+        drawHeaderRow(STOCK_MOVEMENT_TABLE_COLUMNS)
+    }
+
+    private fun drawHeaderRow(columns: List<TableColumn>) {
+        ensureSpace(TABLE_HEADER_HEIGHT + ROW_HEIGHT)
+
+        val top = y
+        fillPaint.color = Color.rgb(237, 238, 238)
+        canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + TABLE_HEADER_HEIGHT, fillPaint)
+
+        var x = MARGIN_LEFT + CELL_PADDING
+        columns.forEach { column ->
+            canvas.drawText(column.title, x, top + 16f, headerPaint)
+            x += column.width
+        }
+        drawTableGrid(
+            columns = columns,
+            top = top,
+            height = TABLE_HEADER_HEIGHT,
+        )
+        y += TABLE_HEADER_HEIGHT
+    }
+
     private fun drawTransactionRow(
         rowNumber: Int,
         transaction: SalesTransaction,
@@ -300,12 +476,16 @@ private class PdfRenderer(
         val values = listOf(
             rowNumber.toString(),
             transaction.createdAtMillis.toShortDateTime(),
-            transaction.buyerName.ifBlank { "Pembeli Umum" },
+            buyerLabel(
+                buyerName = transaction.buyerName,
+                buyerContact = transaction.buyerContact,
+                fallback = "Pembeli Umum",
+            ),
             item?.productName ?: "-",
             item?.let { "${it.quantity} ${it.unit}" } ?: "-",
             item?.sellingPrice?.toRupiah() ?: "-",
             item?.subtotal?.toRupiah() ?: transaction.totalAmount.toRupiah(),
-            transaction.paymentMethod,
+            transaction.toPaymentLabel(),
         )
 
         var x = MARGIN_LEFT + CELL_PADDING
@@ -370,6 +550,158 @@ private class PdfRenderer(
 
         drawTableGrid(
             columns = STOCK_TABLE_COLUMNS,
+            top = top,
+            height = ROW_HEIGHT,
+        )
+        y += ROW_HEIGHT
+    }
+
+    private fun drawDebtTransactionRow(
+        rowNumber: Int,
+        transaction: SalesTransaction,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawDebtTransactionTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            transaction.createdAtMillis.toShortDateTime(),
+            buyerLabel(
+                buyerName = transaction.buyerName,
+                buyerContact = transaction.buyerContact,
+                fallback = "Tanpa Nama",
+            ),
+            transaction.transactionNumber,
+            transaction.totalAmount.toRupiah(),
+            transaction.paidAmount.toRupiah(),
+            transaction.debtAmount.toRupiah(),
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = DEBT_TRANSACTION_TABLE_COLUMNS,
+            boldIndexes = setOf(6),
+            multilineIndexes = setOf(2),
+        )
+    }
+
+    private fun drawDebtPaymentRow(
+        rowNumber: Int,
+        payment: DebtPayment,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawDebtPaymentTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            payment.createdAtMillis.toShortDateTime(),
+            buyerLabel(
+                buyerName = payment.buyerName,
+                buyerContact = payment.buyerContact,
+                fallback = "Tanpa Nama",
+            ),
+            payment.paymentMethod,
+            payment.amount.toRupiah(),
+            payment.note.orEmpty().ifBlank { "-" },
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = DEBT_PAYMENT_TABLE_COLUMNS,
+            boldIndexes = setOf(4),
+            multilineIndexes = setOf(2, 5),
+        )
+    }
+
+    private fun drawDebtCustomerRow(
+        rowNumber: Int,
+        customer: DebtCustomerSummary,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawDebtCustomerTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            buyerLabel(
+                buyerName = customer.buyerName,
+                buyerContact = customer.buyerContact,
+                fallback = "Tanpa Nama",
+            ),
+            customer.totalDebt.toRupiah(),
+            customer.totalPaid.toRupiah(),
+            customer.remainingDebt.toRupiah(),
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = DEBT_CUSTOMER_TABLE_COLUMNS,
+            boldIndexes = setOf(4),
+            multilineIndexes = setOf(1),
+        )
+    }
+
+    private fun drawStockMovementRow(
+        rowNumber: Int,
+        movement: StockMovement,
+        productName: String,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawStockMovementTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            movement.createdAtMillis.toShortDateTime(),
+            productName,
+            movement.type.toReportLabel(),
+            movement.quantity.toString(),
+            movement.currentStock.toString(),
+            movement.note.orEmpty().ifBlank { "-" },
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = STOCK_MOVEMENT_TABLE_COLUMNS,
+            boldIndexes = setOf(3, 4, 5),
+            multilineIndexes = setOf(2, 6),
+        )
+    }
+
+    private fun drawGenericRow(
+        rowNumber: Int,
+        values: List<String>,
+        columns: List<TableColumn>,
+        boldIndexes: Set<Int> = emptySet(),
+        multilineIndexes: Set<Int> = emptySet(),
+    ) {
+        val top = y
+        if (rowNumber % 2 == 0) {
+            fillPaint.color = Color.rgb(252, 252, 252)
+            canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + ROW_HEIGHT, fillPaint)
+        }
+
+        var x = MARGIN_LEFT + CELL_PADDING
+        columns.forEachIndexed { index, column ->
+            drawCell(
+                text = values.getOrElse(index) { "-" },
+                x = x,
+                top = top,
+                width = column.width,
+                paint = if (index in boldIndexes) boldBodyPaint else bodyPaint,
+                maxLines = if (index in multilineIndexes) 2 else 1,
+            )
+            x += column.width
+        }
+
+        drawTableGrid(
+            columns = columns,
             top = top,
             height = ROW_HEIGHT,
         )
@@ -457,6 +789,8 @@ private class PdfRenderer(
         const val SECTION_TITLE_HEIGHT = 20f
         const val TABLE_HEADER_HEIGHT = 25f
         const val ROW_HEIGHT = 40f
+        const val SUMMARY_BOX_WIDTH = 254f
+        const val SUMMARY_BOX_GAP = 12f
 
         val TRANSACTION_TABLE_COLUMNS = listOf(
             TableColumn("No", 32f),
@@ -478,6 +812,43 @@ private class PdfRenderer(
             TableColumn("Satuan", 60f),
             TableColumn("Harga Beli", 106f),
             TableColumn("Harga Jual", 106f),
+        )
+
+        val DEBT_TRANSACTION_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 92f),
+            TableColumn("Pembeli", 150f),
+            TableColumn("Transaksi", 116f),
+            TableColumn("Total", 98f),
+            TableColumn("Bayar", 98f),
+            TableColumn("Sisa Hutang", 200f),
+        )
+
+        val DEBT_PAYMENT_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 100f),
+            TableColumn("Pembeli", 220f),
+            TableColumn("Metode", 90f),
+            TableColumn("Nominal", 120f),
+            TableColumn("Catatan", 224f),
+        )
+
+        val DEBT_CUSTOMER_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Pembeli", 276f),
+            TableColumn("Total Hutang", 160f),
+            TableColumn("Total Bayar", 150f),
+            TableColumn("Sisa Hutang", 168f),
+        )
+
+        val STOCK_MOVEMENT_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 100f),
+            TableColumn("Barang", 244f),
+            TableColumn("Jenis", 90f),
+            TableColumn("Qty", 72f),
+            TableColumn("Stok Akhir", 92f),
+            TableColumn("Catatan", 156f),
         )
     }
 }
@@ -536,6 +907,17 @@ private fun String.ellipsize(
     return "$result..."
 }
 
+private fun buyerLabel(
+    buyerName: String,
+    buyerContact: String,
+    fallback: String,
+): String {
+    val name = buyerName.trim().ifBlank { fallback }
+    val contact = buyerContact.trim()
+
+    return if (contact.isBlank()) name else "$name ($contact)"
+}
+
 private fun Long.toRupiah(): String {
     val grouped = toString()
         .reversed()
@@ -552,4 +934,24 @@ private fun Long.toDateTime(): String {
 
 private fun Long.toShortDateTime(): String {
     return SimpleDateFormat("dd/MM/yy HH:mm", Locale.forLanguageTag("id-ID")).format(Date(this))
+}
+
+private fun StockMovementType.toReportLabel(): String {
+    return when (this) {
+        StockMovementType.IN -> "Masuk"
+        StockMovementType.OUT -> "Keluar"
+        StockMovementType.ADJUSTMENT -> "Penyesuaian"
+    }
+}
+
+private fun SalesTransaction.toPaymentLabel(): String {
+    return if (
+        paymentMethod.equals("Hutang", ignoreCase = true) &&
+        paidAmount > 0L &&
+        paidPaymentMethod.isNotBlank()
+    ) {
+        "Hutang/$paidPaymentMethod"
+    } else {
+        paymentMethod
+    }
 }

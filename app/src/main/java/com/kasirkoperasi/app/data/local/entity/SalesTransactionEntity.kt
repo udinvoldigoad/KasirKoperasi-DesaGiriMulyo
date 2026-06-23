@@ -19,8 +19,12 @@ data class SalesTransactionEntity(
     val transactionNumber: String,
     @ColumnInfo(name = "buyer_name")
     val buyerName: String,
+    @ColumnInfo(name = "buyer_contact")
+    val buyerContact: String = "",
     @ColumnInfo(name = "payment_method")
     val paymentMethod: String,
+    @ColumnInfo(name = "paid_payment_method")
+    val paidPaymentMethod: String = "",
     @ColumnInfo(name = "total_amount")
     val totalAmount: Long,
     @ColumnInfo(name = "total_profit")
@@ -30,7 +34,7 @@ data class SalesTransactionEntity(
     @ColumnInfo(name = "change_amount")
     val changeAmount: Long,
     @ColumnInfo(name = "debt_amount")
-    val legacyAmount: Long = 0L,
+    val debtAmount: Long = 0L,
     @ColumnInfo(name = "item_count")
     val itemCount: Int,
     @ColumnInfo(name = "created_at_millis")

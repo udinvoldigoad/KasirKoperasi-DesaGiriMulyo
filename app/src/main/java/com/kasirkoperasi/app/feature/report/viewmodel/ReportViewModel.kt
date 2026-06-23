@@ -2,10 +2,15 @@ package com.kasirkoperasi.app.feature.report.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kasirkoperasi.app.domain.model.DebtPayment
 import com.kasirkoperasi.app.domain.model.ReportSummary
 import com.kasirkoperasi.app.domain.usecase.ExportTransactionReportPdfUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtCustomerDetailUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtCustomersUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSimpleReportUseCase
+import com.kasirkoperasi.app.domain.usecase.RecordDebtPaymentUseCase
+import com.kasirkoperasi.app.feature.report.state.DebtPaymentMethod
 import com.kasirkoperasi.app.feature.report.state.ReportDailySalesPoint
 import com.kasirkoperasi.app.feature.report.state.ReportExportRange
 import com.kasirkoperasi.app.feature.report.state.ReportUiState
@@ -23,6 +28,9 @@ class ReportViewModel(
     private val getSimpleReportUseCase: GetSimpleReportUseCase,
     private val getSalesTransactionsUseCase: GetSalesTransactionsUseCase,
     private val exportTransactionReportPdfUseCase: ExportTransactionReportPdfUseCase,
+    private val getDebtCustomerDetailUseCase: GetDebtCustomerDetailUseCase,
+    private val getDebtCustomersUseCase: GetDebtCustomersUseCase,
+    private val recordDebtPaymentUseCase: RecordDebtPaymentUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ReportUiState())
     val uiState: StateFlow<ReportUiState> = _uiState.asStateFlow()
@@ -42,6 +50,7 @@ class ReportViewModel(
                     isLoading = true,
                     exportErrorMessage = null,
                     errorMessage = null,
+                    successMessage = null,
                 )
             }
 
@@ -64,11 +73,13 @@ class ReportViewModel(
                         totalSales = summary.totalSales,
                     )
                 }
+                val debtCustomers = getDebtCustomersUseCase()
 
                 ReportDashboardData(
                     todaySummary = todaySummary,
                     monthlySummary = monthlySummary,
                     sevenDaySales = sevenDaySales,
+                    debtCustomers = debtCustomers,
                 )
             }.onSuccess { data ->
                 _uiState.update {
@@ -77,6 +88,7 @@ class ReportViewModel(
                         summary = data.todaySummary,
                         monthlySummary = data.monthlySummary,
                         sevenDaySales = data.sevenDaySales,
+                        debtCustomers = data.debtCustomers,
                     )
                 }
             }.onFailure { throwable ->
@@ -110,6 +122,8 @@ class ReportViewModel(
                 )
                 exportTransactionReportPdfUseCase(
                     periodLabel = range.toPeriodLabel(),
+                    startDateMillis = startDateMillis,
+                    endDateMillis = endDateMillis,
                     transactions = transactions,
                 )
             }.onSuccess { uri ->
@@ -127,6 +141,120 @@ class ReportViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun recordDebtPayment(
+        buyerName: String,
+        buyerContact: String,
+        amountText: String,
+        method: DebtPaymentMethod,
+    ) {
+        val amount = amountText.filter { it.isDigit() }.toLongOrNull() ?: 0L
+        if (buyerName.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Nama pembeli hutang tidak valid") }
+            return
+        }
+        if (amount <= 0L) {
+            _uiState.update { it.copy(errorMessage = "Nominal pelunasan harus diisi") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isRecordingDebtPayment = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                recordDebtPaymentUseCase(
+                    DebtPayment(
+                        buyerName = buyerName,
+                        buyerContact = buyerContact,
+                        paymentMethod = method.label,
+                        amount = amount,
+                        note = "Pelunasan hutang",
+                    ),
+                )
+                val (monthStartMillis, monthEndMillis) = ReportExportRange.CurrentMonth.toMillisRange()
+                val selectedDetail = _uiState.value.selectedDebtCustomerDetail
+                DebtPaymentResult(
+                    monthlySummary = getSimpleReportUseCase(
+                        startDateMillis = monthStartMillis,
+                        endDateMillis = monthEndMillis,
+                    ),
+                    debtCustomers = getDebtCustomersUseCase(),
+                    selectedDebtCustomerDetail = selectedDetail?.let {
+                        getDebtCustomerDetailUseCase(
+                            buyerName = it.summary.buyerName,
+                            buyerContact = it.summary.buyerContact,
+                        )
+                    },
+                )
+            }.onSuccess { result ->
+                _uiState.update {
+                    it.copy(
+                        isRecordingDebtPayment = false,
+                        monthlySummary = result.monthlySummary,
+                        debtCustomers = result.debtCustomers,
+                        selectedDebtCustomerDetail = result.selectedDebtCustomerDetail,
+                        debtPaymentSuccessSignal = it.debtPaymentSuccessSignal + 1,
+                        successMessage = "Pembayaran hutang berhasil dicatat",
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isRecordingDebtPayment = false,
+                        errorMessage = throwable.message ?: "Gagal mencatat pembayaran hutang",
+                    )
+                }
+            }
+        }
+    }
+
+    fun openDebtCustomerDetail(customer: com.kasirkoperasi.app.domain.model.DebtCustomerSummary) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isDebtDetailLoading = true,
+                    debtDetailErrorMessage = null,
+                )
+            }
+
+            runCatching {
+                getDebtCustomerDetailUseCase(
+                    buyerName = customer.buyerName,
+                    buyerContact = customer.buyerContact,
+                )
+            }.onSuccess { detail ->
+                _uiState.update {
+                    it.copy(
+                        isDebtDetailLoading = false,
+                        selectedDebtCustomerDetail = detail,
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isDebtDetailLoading = false,
+                        debtDetailErrorMessage = throwable.message ?: "Gagal memuat detail hutang",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissDebtCustomerDetail() {
+        _uiState.update {
+            it.copy(
+                selectedDebtCustomerDetail = null,
+                isDebtDetailLoading = false,
+                debtDetailErrorMessage = null,
+            )
         }
     }
 
@@ -220,6 +348,13 @@ private data class ReportDashboardData(
     val todaySummary: ReportSummary,
     val monthlySummary: ReportSummary,
     val sevenDaySales: List<ReportDailySalesPoint>,
+    val debtCustomers: List<com.kasirkoperasi.app.domain.model.DebtCustomerSummary>,
+)
+
+private data class DebtPaymentResult(
+    val monthlySummary: ReportSummary,
+    val debtCustomers: List<com.kasirkoperasi.app.domain.model.DebtCustomerSummary>,
+    val selectedDebtCustomerDetail: com.kasirkoperasi.app.domain.model.DebtCustomerDetail?,
 )
 
 private data class DayRangeMillis(

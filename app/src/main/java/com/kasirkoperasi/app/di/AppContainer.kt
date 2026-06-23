@@ -3,20 +3,30 @@ package com.kasirkoperasi.app.di
 import android.content.Context
 import com.kasirkoperasi.app.core.pdf.TransactionReportPdfExporter
 import com.kasirkoperasi.app.data.local.database.KasirDatabase
+import com.kasirkoperasi.app.data.repository.DebtRepositoryImpl
 import com.kasirkoperasi.app.data.repository.ProductRepositoryImpl
 import com.kasirkoperasi.app.data.repository.ReportRepositoryImpl
 import com.kasirkoperasi.app.data.repository.SalesTransactionRepositoryImpl
+import com.kasirkoperasi.app.data.repository.StockRepositoryImpl
+import com.kasirkoperasi.app.domain.repository.DebtRepository
 import com.kasirkoperasi.app.domain.repository.ProductRepository
 import com.kasirkoperasi.app.domain.repository.ReportRepository
 import com.kasirkoperasi.app.domain.repository.SalesTransactionRepository
+import com.kasirkoperasi.app.domain.repository.StockRepository
 import com.kasirkoperasi.app.domain.usecase.CompleteSalesTransactionUseCase
 import com.kasirkoperasi.app.domain.usecase.DeactivateProductUseCase
 import com.kasirkoperasi.app.domain.usecase.ExportTransactionReportPdfUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtCustomerDetailUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtCustomersUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtPaymentsUseCase
+import com.kasirkoperasi.app.domain.usecase.GetDebtTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetProductsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionItemsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSimpleReportUseCase
+import com.kasirkoperasi.app.domain.usecase.GetStockMovementsUseCase
 import com.kasirkoperasi.app.domain.usecase.ImportProductsCsvUseCase
+import com.kasirkoperasi.app.domain.usecase.RecordDebtPaymentUseCase
 import com.kasirkoperasi.app.domain.usecase.SaveProductUseCase
 import com.kasirkoperasi.app.domain.usecase.UpdateProductWithStockInUseCase
 
@@ -37,6 +47,15 @@ class AppContainer(context: Context) {
         database = database,
     )
 
+    private val debtRepository: DebtRepository = DebtRepositoryImpl(
+        debtPaymentDao = database.debtPaymentDao(),
+        salesTransactionDao = database.salesTransactionDao(),
+    )
+
+    private val stockRepository: StockRepository = StockRepositoryImpl(
+        stockDao = database.stockDao(),
+    )
+
     private val reportRepository: ReportRepository = ReportRepositoryImpl(
         reportDao = database.reportDao(),
     )
@@ -48,11 +67,20 @@ class AppContainer(context: Context) {
     val deactivateProductUseCase = DeactivateProductUseCase(productRepository)
     val completeSalesTransactionUseCase = CompleteSalesTransactionUseCase(salesTransactionRepository)
     val getSalesTransactionItemsUseCase = GetSalesTransactionItemsUseCase(salesTransactionRepository)
+    val getSalesTransactionsUseCase = GetSalesTransactionsUseCase(salesTransactionRepository)
+    val getDebtTransactionsUseCase = GetDebtTransactionsUseCase(salesTransactionRepository)
+    val getDebtCustomerDetailUseCase = GetDebtCustomerDetailUseCase(debtRepository)
+    val getDebtCustomersUseCase = GetDebtCustomersUseCase(debtRepository)
+    val getDebtPaymentsUseCase = GetDebtPaymentsUseCase(debtRepository)
+    val recordDebtPaymentUseCase = RecordDebtPaymentUseCase(debtRepository)
+    val getStockMovementsUseCase = GetStockMovementsUseCase(stockRepository)
     val exportTransactionReportPdfUseCase = ExportTransactionReportPdfUseCase(
         getSalesTransactionItemsUseCase = getSalesTransactionItemsUseCase,
         getProductsUseCase = getProductsUseCase,
+        getDebtPaymentsUseCase = getDebtPaymentsUseCase,
+        getDebtCustomersUseCase = getDebtCustomersUseCase,
+        getStockMovementsUseCase = getStockMovementsUseCase,
         transactionReportPdfExporter = transactionReportPdfExporter,
     )
-    val getSalesTransactionsUseCase = GetSalesTransactionsUseCase(salesTransactionRepository)
     val getSimpleReportUseCase = GetSimpleReportUseCase(reportRepository)
 }

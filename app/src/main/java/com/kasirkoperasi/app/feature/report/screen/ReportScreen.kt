@@ -30,13 +30,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Refresh
@@ -44,13 +48,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,12 +71,18 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.domain.model.DebtCustomerDetail
+import com.kasirkoperasi.app.domain.model.DebtPayment
+import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
 import com.kasirkoperasi.app.domain.model.ReportSummary
+import com.kasirkoperasi.app.domain.model.SalesTransaction
+import com.kasirkoperasi.app.feature.report.state.DebtPaymentMethod
 import com.kasirkoperasi.app.feature.report.state.ReportDailySalesPoint
 import com.kasirkoperasi.app.feature.report.state.ReportExportRange
 import com.kasirkoperasi.app.feature.report.state.ReportUiState
@@ -81,7 +95,10 @@ import com.kasirkoperasi.app.ui.theme.LineSoft
 import com.kasirkoperasi.app.ui.theme.MutedText
 import com.kasirkoperasi.app.ui.theme.SoftGray
 import com.kasirkoperasi.app.ui.theme.WarmAccent
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ReportScreen(
@@ -91,14 +108,36 @@ fun ReportScreen(
     onOpenHistory: () -> Unit,
     onRefresh: () -> Unit,
     onExportPdf: (ReportExportRange) -> Unit,
+    onRecordDebtPayment: (String, String, String, DebtPaymentMethod) -> Unit,
+    onDebtCustomerSelected: (DebtCustomerSummary) -> Unit,
+    onDismissDebtCustomerDetail: () -> Unit,
     modifier: Modifier = Modifier,
     storeLogoUri: String? = null,
 ) {
     var isExportRangePanelVisible by remember { mutableStateOf(false) }
+    var selectedDebtCustomer by remember { mutableStateOf<DebtCustomerSummary?>(null) }
+    var debtPaymentAmountText by remember { mutableStateOf("") }
+    var debtPaymentMethod by remember { mutableStateOf(DebtPaymentMethod.Cash) }
     val isShowingLoadingModal = uiState.isLoading || uiState.isExporting
 
-    BackHandler(enabled = isExportRangePanelVisible) {
-        isExportRangePanelVisible = false
+    LaunchedEffect(uiState.debtPaymentSuccessSignal) {
+        if (uiState.debtPaymentSuccessSignal > 0) {
+            selectedDebtCustomer = null
+            debtPaymentAmountText = ""
+        }
+    }
+
+    BackHandler(
+        enabled = isExportRangePanelVisible ||
+            selectedDebtCustomer != null ||
+            uiState.selectedDebtCustomerDetail != null ||
+            uiState.isDebtDetailLoading,
+    ) {
+        when {
+            selectedDebtCustomer != null -> selectedDebtCustomer = null
+            uiState.selectedDebtCustomerDetail != null || uiState.isDebtDetailLoading -> onDismissDebtCustomerDetail()
+            isExportRangePanelVisible -> isExportRangePanelVisible = false
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -139,6 +178,12 @@ fun ReportScreen(
                     }
                 }
 
+                uiState.successMessage?.let { message ->
+                    item {
+                        ReportSuccessCard(message = message)
+                    }
+                }
+
                 uiState.exportErrorMessage?.let { message ->
                     item {
                         ReportMessageCard(message = message)
@@ -151,6 +196,19 @@ fun ReportScreen(
 
                 item {
                     SevenDaySalesChartCard(points = uiState.sevenDaySales)
+                }
+
+                item {
+                    DebtOverviewCard(
+                        debtCustomers = uiState.debtCustomers,
+                        monthlyDebtAmount = uiState.monthlySummary.totalDebt,
+                        onPayDebtClick = { customer ->
+                            selectedDebtCustomer = customer
+                            debtPaymentAmountText = ""
+                            debtPaymentMethod = DebtPaymentMethod.Cash
+                        },
+                        onDetailClick = onDebtCustomerSelected,
+                    )
                 }
 
                 item {
@@ -173,6 +231,48 @@ fun ReportScreen(
                 onRangeSelected = { range ->
                     isExportRangePanelVisible = false
                     onExportPdf(range)
+                },
+            )
+        }
+
+        if (
+            uiState.selectedDebtCustomerDetail != null ||
+            uiState.isDebtDetailLoading ||
+            uiState.debtDetailErrorMessage != null
+        ) {
+            DebtCustomerDetailPanel(
+                detail = uiState.selectedDebtCustomerDetail,
+                isLoading = uiState.isDebtDetailLoading,
+                errorMessage = uiState.debtDetailErrorMessage,
+                onPayDebtClick = { customer ->
+                    selectedDebtCustomer = customer
+                    debtPaymentAmountText = ""
+                    debtPaymentMethod = DebtPaymentMethod.Cash
+                },
+                onDismiss = onDismissDebtCustomerDetail,
+            )
+        }
+
+        selectedDebtCustomer?.let { customer ->
+            DebtPaymentPanel(
+                customer = customer,
+                amountText = debtPaymentAmountText,
+                selectedMethod = debtPaymentMethod,
+                isSaving = uiState.isRecordingDebtPayment,
+                onAmountChange = { value ->
+                    debtPaymentAmountText = value.toPaymentText()
+                },
+                onMethodSelected = { debtPaymentMethod = it },
+                onSave = {
+                    onRecordDebtPayment(
+                        customer.buyerName,
+                        customer.buyerContact,
+                        debtPaymentAmountText,
+                        debtPaymentMethod,
+                    )
+                },
+                onDismiss = {
+                    selectedDebtCustomer = null
                 },
             )
         }
@@ -381,18 +481,18 @@ private fun ReportMetricGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ReportMetricCard(
-                title = "Item Terjual",
-                value = summary.soldItemCount.toString(),
-                caption = "Total kuantitas",
-                icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                title = "Cash Masuk",
+                value = summary.totalCash.toRupiah(),
+                caption = "Transaksi tunai",
+                icon = Icons.Outlined.AttachMoney,
                 iconBackground = WarmAccent.copy(alpha = 0.45f),
                 modifier = Modifier.weight(1f),
             )
             ReportMetricCard(
-                title = "Stok Menipis",
-                value = summary.lowStockItemCount.toString(),
-                caption = "Stok 5 atau kurang",
-                icon = Icons.Outlined.Inventory2,
+                title = "QRIS Masuk",
+                value = summary.totalQris.toRupiah(),
+                caption = "Transaksi QRIS",
+                icon = Icons.Outlined.CreditCard,
                 iconBackground = SoftGray,
                 modifier = Modifier.weight(1f),
             )
@@ -534,6 +634,840 @@ private fun SalesBar(
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun DebtOverviewCard(
+    debtCustomers: List<DebtCustomerSummary>,
+    monthlyDebtAmount: Long,
+    onPayDebtClick: (DebtCustomerSummary) -> Unit,
+    onDetailClick: (DebtCustomerSummary) -> Unit,
+) {
+    val totalRemainingDebt = debtCustomers.sumOf { it.remainingDebt }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Piutang Pembeli",
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Sisa hutang yang belum dilunasi.",
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(WarmAccent.copy(alpha = 0.45f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CreditCard,
+                        contentDescription = null,
+                        modifier = Modifier.size(23.dp),
+                        tint = DeepGreen,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                DebtMiniStat(
+                    label = "Total Sisa",
+                    value = totalRemainingDebt.toRupiah(),
+                    modifier = Modifier.weight(1f),
+                )
+                DebtMiniStat(
+                    label = "Hutang Baru Bulan Ini",
+                    value = monthlyDebtAmount.toRupiah(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (debtCustomers.isEmpty()) {
+                Text(
+                    text = "Belum ada hutang aktif.",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    debtCustomers.forEach { customer ->
+                        DebtCustomerRow(
+                            customer = customer,
+                            onPayDebtClick = { onPayDebtClick(customer) },
+                            onDetailClick = { onDetailClick(customer) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtMiniStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = SoftGray,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = label,
+                color = MutedText,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = value,
+                color = DeepGreen,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DebtCustomerRow(
+    customer: DebtCustomerSummary,
+    onPayDebtClick: () -> Unit,
+    onDetailClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onDetailClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = CreamBackground,
+        border = BorderStroke(1.dp, LineSoft),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = customer.buyerName,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (customer.buyerContact.isNotBlank()) {
+                    Text(
+                        text = customer.buyerContact,
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = "Total hutang ${customer.totalDebt.toRupiah()} - sudah bayar ${customer.totalPaid.toRupiah()}",
+                    color = MutedText,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = customer.remainingDebt.toRupiah(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+                Button(
+                    onClick = onPayDebtClick,
+                    modifier = Modifier.height(34.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = "Bayar",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = "Detail",
+                    color = LeafGreen,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtCustomerDetailPanel(
+    detail: DebtCustomerDetail?,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onPayDebtClick: (DebtCustomerSummary) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.76f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ReportPanelHandle(onDismiss = onDismiss)
+
+                Text(
+                    text = "Detail Hutang Pembeli",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    color = DeepGreen,
+                                    trackColor = FreshMint,
+                                )
+                                Text(
+                                    text = "Memuat detail hutang...",
+                                    color = MutedText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                    }
+
+                    detail == null -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = errorMessage ?: "Detail hutang tidak ditemukan.",
+                                color = MutedText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+
+                    else -> {
+                        DebtCustomerDetailContent(
+                            detail = detail,
+                            onPayDebtClick = onPayDebtClick,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtCustomerDetailContent(
+    detail: DebtCustomerDetail,
+    onPayDebtClick: (DebtCustomerSummary) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            DebtDetailSummaryCard(
+                summary = detail.summary,
+                onPayDebtClick = { onPayDebtClick(detail.summary) },
+            )
+        }
+
+        item {
+            DetailSectionTitle(
+                title = "Transaksi Hutang",
+                subtitle = "${detail.transactions.size} transaksi tercatat",
+            )
+        }
+
+        if (detail.transactions.isEmpty()) {
+            item {
+                EmptyDebtDetailMessage(message = "Belum ada transaksi hutang untuk pembeli ini.")
+            }
+        } else {
+            items(
+                items = detail.transactions,
+                key = { it.id },
+            ) { transaction ->
+                DebtTransactionHistoryCard(transaction = transaction)
+            }
+        }
+
+        item {
+            DetailSectionTitle(
+                title = "Riwayat Pelunasan",
+                subtitle = "${detail.payments.size} pembayaran tercatat",
+            )
+        }
+
+        if (detail.payments.isEmpty()) {
+            item {
+                EmptyDebtDetailMessage(message = "Belum ada pelunasan hutang.")
+            }
+        } else {
+            items(
+                items = detail.payments,
+                key = { it.id },
+            ) { payment ->
+                DebtPaymentHistoryCard(payment = payment)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtDetailSummaryCard(
+    summary: DebtCustomerSummary,
+    onPayDebtClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, LineSoft),
+        shadowElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = summary.buyerName,
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (summary.buyerContact.isNotBlank()) {
+                        Text(
+                            text = summary.buyerContact,
+                            color = DeepGreen,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onPayDebtClick,
+                    enabled = summary.remainingDebt > 0L,
+                    modifier = Modifier.height(38.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                        disabledContainerColor = SoftGray,
+                        disabledContentColor = MutedText,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = "Bayar",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DebtMiniStat(
+                    label = "Total Hutang",
+                    value = summary.totalDebt.toRupiah(),
+                    modifier = Modifier.weight(1f),
+                )
+                DebtMiniStat(
+                    label = "Sudah Bayar",
+                    value = summary.totalPaid.toRupiah(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = FreshMint,
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Sisa Hutang",
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = summary.remainingDebt.toRupiah(),
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSectionTitle(
+    title: String,
+    subtitle: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            text = title,
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = subtitle,
+            color = MutedText,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun DebtTransactionHistoryCard(
+    transaction: SalesTransaction,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, LineSoft),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = transaction.transactionNumber,
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = transaction.createdAtMillis.toReportDateTime(),
+                        color = MutedText,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                Text(
+                    text = transaction.debtAmount.toRupiah(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            DebtHistoryAmountRow(label = "Total belanja", value = transaction.totalAmount.toRupiah())
+            DebtHistoryAmountRow(label = "Dibayar saat transaksi", value = transaction.paidAmount.toRupiah())
+            DebtHistoryAmountRow(label = "Sisa hutang transaksi", value = transaction.debtAmount.toRupiah())
+        }
+    }
+}
+
+@Composable
+private fun DebtPaymentHistoryCard(
+    payment: DebtPayment,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, LineSoft),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(FreshMint, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (payment.paymentMethod.equals("QRIS", ignoreCase = true)) {
+                        Icons.Outlined.CreditCard
+                    } else {
+                        Icons.Outlined.AttachMoney
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "${payment.paymentMethod} - ${payment.amount.toRupiah()}",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = payment.createdAtMillis.toReportDateTime(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                payment.note?.takeIf { it.isNotBlank() }?.let { note ->
+                    Text(
+                        text = note,
+                        color = MutedText,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtHistoryAmountRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = value,
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun EmptyDebtDetailMessage(
+    message: String,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = SoftGray,
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(14.dp),
+            color = MutedText,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun DebtPaymentPanel(
+    customer: DebtCustomerSummary,
+    amountText: String,
+    selectedMethod: DebtPaymentMethod,
+    isSaving: Boolean,
+    onAmountChange: (String) -> Unit,
+    onMethodSelected: (DebtPaymentMethod) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.34f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onDismiss() },
+        )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.58f)
+                .clickable { },
+            color = CreamBackground,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ReportPanelHandle(onDismiss = onDismiss)
+
+                Text(
+                    text = "Bayar Hutang",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, LineSoft),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = customer.buyerName,
+                            color = Color(0xFF17221B),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (customer.buyerContact.isNotBlank()) {
+                            Text(
+                                text = customer.buyerContact,
+                                color = MutedText,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Text(
+                            text = "Sisa hutang: ${customer.remainingDebt.toRupiah()}",
+                            color = DeepGreen,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    DebtPaymentMethod.entries.forEach { method ->
+                        DebtPaymentMethodButton(
+                            method = method,
+                            isSelected = selectedMethod == method,
+                            onClick = { onMethodSelected(method) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = onAmountChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Nominal pembayaran") },
+                    prefix = { Text("Rp") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DeepGreen,
+                        unfocusedBorderColor = LineSoft,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        cursorColor = DeepGreen,
+                    ),
+                )
+
+                Button(
+                    onClick = onSave,
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                        disabledContainerColor = SoftGray,
+                        disabledContentColor = MutedText,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        text = if (isSaving) "Menyimpan..." else "Simpan Pembayaran",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebtPaymentMethodButton(
+    method: DebtPaymentMethod,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) DeepGreen else Color.White,
+            contentColor = if (isSelected) Color.White else DeepGreen,
+        ),
+        border = BorderStroke(1.dp, if (isSelected) DeepGreen else LineSoft),
+        shape = RoundedCornerShape(14.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+    ) {
+        Icon(
+            imageVector = if (method == DebtPaymentMethod.Qris) Icons.Outlined.CreditCard else Icons.Outlined.AttachMoney,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = method.label,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
         )
     }
 }
@@ -890,6 +1824,26 @@ private fun ReportMessageCard(
     }
 }
 
+@Composable
+private fun ReportSuccessCard(
+    message: String,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = FreshMint,
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(14.dp),
+            color = DeepGreen,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 private fun Long.toRupiah(): String {
     val grouped = toString()
         .reversed()
@@ -900,12 +1854,27 @@ private fun Long.toRupiah(): String {
     return "Rp$grouped"
 }
 
+private fun String.toPaymentText(): String {
+    val amount = filter { it.isDigit() }.toLongOrNull() ?: return ""
+    if (amount <= 0L) return ""
+
+    return amount.toString()
+        .reversed()
+        .chunked(3)
+        .joinToString(".")
+        .reversed()
+}
+
 private fun Long.toShortRupiah(): String {
     return when {
         this >= 1_000_000L -> "Rp${this / 1_000_000L}jt"
         this >= 1_000L -> "Rp${this / 1_000L}rb"
         else -> "Rp$this"
     }
+}
+
+private fun Long.toReportDateTime(): String {
+    return SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.forLanguageTag("id-ID")).format(Date(this))
 }
 
 private fun ReportExportRange.descriptionForUi(): String {

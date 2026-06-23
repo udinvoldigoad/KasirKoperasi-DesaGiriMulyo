@@ -44,6 +44,12 @@ object ReceiptEscPosFormatter {
             output.text(column("Pembeli", data.buyerName.take(20)))
         }
         output.text(column("Pembayaran", data.paymentMethod))
+        if (data.paymentMethod.equals("Hutang", ignoreCase = true) &&
+            data.paidAmount > 0L &&
+            data.paidPaymentMethod.isNotBlank()
+        ) {
+            output.text(column("Uang Muka Via", data.paidPaymentMethod))
+        }
         output.text(separator())
 
         data.items.forEach { item ->
@@ -61,7 +67,11 @@ object ReceiptEscPosFormatter {
         output.text(column("TOTAL", data.totalAmount.toRupiah()))
         output.bold(false)
         output.text(column("Dibayar", data.paidAmount.toRupiah()))
-        output.text(column("Kembali", data.changeAmount.toRupiah()))
+        if (data.debtAmount > 0L) {
+            output.text(column("Sisa Hutang", data.debtAmount.toRupiah()))
+        } else {
+            output.text(column("Kembali", data.changeAmount.toRupiah()))
+        }
         output.text(separator())
 
         output.alignCenter()

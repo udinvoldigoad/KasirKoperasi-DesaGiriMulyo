@@ -10,6 +10,8 @@ import com.kasirkoperasi.app.data.local.dao.ProductDao
 import com.kasirkoperasi.app.data.local.dao.ReportDao
 import com.kasirkoperasi.app.data.local.dao.SalesTransactionDao
 import com.kasirkoperasi.app.data.local.dao.StockDao
+import com.kasirkoperasi.app.data.local.dao.DebtPaymentDao
+import com.kasirkoperasi.app.data.local.entity.DebtPaymentEntity
 import com.kasirkoperasi.app.data.local.entity.ProductEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionItemEntity
@@ -21,8 +23,9 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
         StockMovementEntity::class,
         SalesTransactionEntity::class,
         SalesTransactionItemEntity::class,
+        DebtPaymentEntity::class,
     ],
-    version = 6,
+    version = 9,
     exportSchema = false,
 )
 abstract class KasirDatabase : RoomDatabase() {
@@ -33,6 +36,8 @@ abstract class KasirDatabase : RoomDatabase() {
     abstract fun reportDao(): ReportDao
 
     abstract fun salesTransactionDao(): SalesTransactionDao
+
+    abstract fun debtPaymentDao(): DebtPaymentDao
 
     companion object {
         @Volatile
@@ -51,6 +56,9 @@ abstract class KasirDatabase : RoomDatabase() {
                         MIGRATION_3_4,
                         MIGRATION_4_5,
                         MIGRATION_5_6,
+                        MIGRATION_6_7,
+                        MIGRATION_7_8,
+                        MIGRATION_8_9,
                     )
                     .build()
                     .also { instance = it }
@@ -163,6 +171,71 @@ abstract class KasirDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE products ADD COLUMN image_uri TEXT")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `debt_payments` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `buyer_name` TEXT NOT NULL,
+                        `payment_method` TEXT NOT NULL,
+                        `amount` INTEGER NOT NULL,
+                        `note` TEXT,
+                        `created_at_millis` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_debt_payments_buyer_name`
+                    ON `debt_payments` (`buyer_name`)
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_debt_payments_created_at_millis`
+                    ON `debt_payments` (`created_at_millis`)
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE sales_transactions ADD COLUMN paid_payment_method TEXT NOT NULL DEFAULT ''",
+                )
+                db.execSQL(
+                    """
+                    UPDATE sales_transactions
+                    SET paid_payment_method = CASE
+                        WHEN lower(payment_method) = 'cash' THEN 'Cash'
+                        WHEN lower(payment_method) = 'qris' THEN 'QRIS'
+                        WHEN lower(payment_method) = 'hutang' AND paid_amount > 0 THEN 'Cash'
+                        ELSE ''
+                    END
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE sales_transactions ADD COLUMN buyer_contact TEXT NOT NULL DEFAULT ''",
+                )
+                db.execSQL(
+                    "ALTER TABLE debt_payments ADD COLUMN buyer_contact TEXT NOT NULL DEFAULT ''",
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_debt_payments_buyer_name_buyer_contact`
+                    ON `debt_payments` (`buyer_name`, `buyer_contact`)
+                    """.trimIndent(),
+                )
             }
         }
     }

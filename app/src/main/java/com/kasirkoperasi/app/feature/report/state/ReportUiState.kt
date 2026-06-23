@@ -1,17 +1,26 @@
 package com.kasirkoperasi.app.feature.report.state
 
 import android.net.Uri
+import com.kasirkoperasi.app.domain.model.DebtCustomerDetail
+import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
 import com.kasirkoperasi.app.domain.model.ReportSummary
 
 data class ReportUiState(
     val isLoading: Boolean = false,
     val isExporting: Boolean = false,
+    val isRecordingDebtPayment: Boolean = false,
+    val isDebtDetailLoading: Boolean = false,
     val summary: ReportSummary = ReportSummary(),
     val monthlySummary: ReportSummary = ReportSummary(),
     val sevenDaySales: List<ReportDailySalesPoint> = emptyList(),
+    val debtCustomers: List<DebtCustomerSummary> = emptyList(),
+    val selectedDebtCustomerDetail: DebtCustomerDetail? = null,
     val exportedPdfUri: Uri? = null,
+    val debtPaymentSuccessSignal: Int = 0,
     val errorMessage: String? = null,
+    val debtDetailErrorMessage: String? = null,
     val exportErrorMessage: String? = null,
+    val successMessage: String? = null,
 )
 
 data class ReportDailySalesPoint(
@@ -35,4 +44,11 @@ enum class ReportExportRange(
         title = "1 Bulan",
         description = "Export pencatatan bulan berjalan.",
     ),
+}
+
+enum class DebtPaymentMethod(
+    val label: String,
+) {
+    Cash("Cash"),
+    Qris("QRIS"),
 }

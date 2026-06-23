@@ -60,15 +60,33 @@ class SalesTransactionRepositoryImpl(
             }
             val itemCount = productSnapshots.sumOf { (_, quantity) -> quantity }
             val paymentMethod = payment.paymentMethod
-            require(paymentMethod == PAYMENT_METHOD_CASH || paymentMethod == PAYMENT_METHOD_QRIS) {
+            require(
+                paymentMethod == PAYMENT_METHOD_CASH ||
+                    paymentMethod == PAYMENT_METHOD_QRIS ||
+                    paymentMethod == PAYMENT_METHOD_DEBT,
+            ) {
                 "Metode pembayaran tidak valid"
             }
             val normalizedPaidAmount = when (paymentMethod) {
                 PAYMENT_METHOD_QRIS -> totalAmount
+                PAYMENT_METHOD_DEBT -> payment.paidAmount.coerceIn(0L, totalAmount)
                 else -> payment.paidAmount.coerceAtLeast(0L)
+            }
+            val paidPaymentMethod = when {
+                paymentMethod == PAYMENT_METHOD_CASH -> PAYMENT_METHOD_CASH
+                paymentMethod == PAYMENT_METHOD_QRIS -> PAYMENT_METHOD_QRIS
+                paymentMethod == PAYMENT_METHOD_DEBT && normalizedPaidAmount > 0L -> {
+                    payment.paidPaymentMethod.toSupportedPaidPaymentMethod()
+                }
+                else -> ""
             }
             val changeAmount = if (paymentMethod == PAYMENT_METHOD_CASH) {
                 (normalizedPaidAmount - totalAmount).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+            val debtAmount = if (paymentMethod == PAYMENT_METHOD_DEBT) {
+                (totalAmount - normalizedPaidAmount).coerceAtLeast(0L)
             } else {
                 0L
             }
@@ -76,17 +94,28 @@ class SalesTransactionRepositoryImpl(
             if (paymentMethod == PAYMENT_METHOD_CASH && normalizedPaidAmount < totalAmount) {
                 error("Uang dibayarkan masih kurang")
             }
+            if (paymentMethod == PAYMENT_METHOD_DEBT && payment.buyerName.isBlank()) {
+                error("Nama pembeli wajib diisi untuk transaksi hutang")
+            }
+            if (paymentMethod == PAYMENT_METHOD_DEBT && normalizedPaidAmount >= totalAmount) {
+                error("Transaksi sudah lunas. Gunakan metode Cash atau QRIS.")
+            }
+            if (paymentMethod == PAYMENT_METHOD_DEBT && normalizedPaidAmount > 0L && paidPaymentMethod.isBlank()) {
+                error("Pilih metode uang muka hutang")
+            }
 
             val transactionId = salesTransactionDao.insertTransaction(
                 SalesTransactionEntity(
                     transactionNumber = transactionNumber,
                     buyerName = payment.buyerName.trim(),
+                    buyerContact = payment.buyerContact.trim(),
                     paymentMethod = paymentMethod,
+                    paidPaymentMethod = paidPaymentMethod,
                     totalAmount = totalAmount,
                     totalProfit = totalProfit,
                     paidAmount = normalizedPaidAmount,
                     changeAmount = changeAmount,
-                    legacyAmount = 0L,
+                    debtAmount = debtAmount,
                     itemCount = itemCount,
                     createdAtMillis = createdAtMillis,
                 ),
@@ -144,6 +173,22 @@ class SalesTransactionRepositoryImpl(
         ).map { it.toDomain() }
     }
 
+    override suspend fun getDebtTransactions(limit: Int): List<SalesTransaction> {
+        return salesTransactionDao.getDebtTransactions(limit = limit).map { it.toDomain() }
+    }
+
+    override suspend fun getDebtTransactionsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<SalesTransaction> {
+        return salesTransactionDao.getDebtTransactionsBetween(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+            limit = limit,
+        ).map { it.toDomain() }
+    }
+
     override suspend fun getTransactionItems(transactionId: Long): List<SalesTransactionItem> {
         require(transactionId > 0L) { "Transaksi tidak valid" }
 
@@ -153,5 +198,14 @@ class SalesTransactionRepositoryImpl(
     private companion object {
         const val PAYMENT_METHOD_CASH = "Cash"
         const val PAYMENT_METHOD_QRIS = "QRIS"
+        const val PAYMENT_METHOD_DEBT = "Hutang"
+    }
+}
+
+private fun String.toSupportedPaidPaymentMethod(): String {
+    return when {
+        equals("QRIS", ignoreCase = true) -> "QRIS"
+        equals("Cash", ignoreCase = true) -> "Cash"
+        else -> ""
     }
 }

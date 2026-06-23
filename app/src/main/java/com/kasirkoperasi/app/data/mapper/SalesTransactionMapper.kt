@@ -9,11 +9,14 @@ fun SalesTransactionEntity.toDomain(): SalesTransaction = SalesTransaction(
     id = id,
     transactionNumber = transactionNumber,
     buyerName = buyerName,
+    buyerContact = buyerContact,
     paymentMethod = paymentMethod.toSupportedPaymentMethod(),
+    paidPaymentMethod = paidPaymentMethod.toSupportedPaidPaymentMethod(),
     totalAmount = totalAmount,
     totalProfit = totalProfit,
     paidAmount = if (paymentMethod.isSupportedPaymentMethod()) paidAmount else totalAmount,
     changeAmount = changeAmount,
+    debtAmount = if (paymentMethod.equals("Hutang", ignoreCase = true)) debtAmount else 0L,
     itemCount = itemCount,
     createdAtMillis = createdAtMillis,
 )
@@ -33,9 +36,23 @@ fun SalesTransactionItemEntity.toDomain(): SalesTransactionItem = SalesTransacti
 )
 
 private fun String.isSupportedPaymentMethod(): Boolean {
-    return equals("Cash", ignoreCase = true) || equals("QRIS", ignoreCase = true)
+    return equals("Cash", ignoreCase = true) ||
+        equals("QRIS", ignoreCase = true) ||
+        equals("Hutang", ignoreCase = true)
 }
 
 private fun String.toSupportedPaymentMethod(): String {
-    return if (equals("QRIS", ignoreCase = true)) "QRIS" else "Cash"
+    return when {
+        equals("QRIS", ignoreCase = true) -> "QRIS"
+        equals("Hutang", ignoreCase = true) -> "Hutang"
+        else -> "Cash"
+    }
+}
+
+private fun String.toSupportedPaidPaymentMethod(): String {
+    return when {
+        equals("QRIS", ignoreCase = true) -> "QRIS"
+        equals("Cash", ignoreCase = true) -> "Cash"
+        else -> ""
+    }
 }

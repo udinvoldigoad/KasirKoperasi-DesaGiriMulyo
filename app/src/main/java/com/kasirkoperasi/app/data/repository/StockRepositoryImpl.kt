@@ -13,6 +13,18 @@ class StockRepositoryImpl(
         return stockDao.getStockMovements(productId).map { it.toDomain() }
     }
 
+    override suspend fun getStockMovementsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<StockMovement> {
+        return stockDao.getStockMovementsBetween(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+            limit = limit,
+        ).map { it.toDomain() }
+    }
+
     override suspend fun addStockMovement(stockMovement: StockMovement): Long {
         return stockDao.insertStockMovement(stockMovement.toEntity())
     }

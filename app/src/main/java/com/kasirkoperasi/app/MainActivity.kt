@@ -72,6 +72,9 @@ class MainActivity : ComponentActivity() {
             getSimpleReportUseCase = appContainer.getSimpleReportUseCase,
             getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
             exportTransactionReportPdfUseCase = appContainer.exportTransactionReportPdfUseCase,
+            getDebtCustomerDetailUseCase = appContainer.getDebtCustomerDetailUseCase,
+            getDebtCustomersUseCase = appContainer.getDebtCustomersUseCase,
+            recordDebtPaymentUseCase = appContainer.recordDebtPaymentUseCase,
         )
     }
 
@@ -264,7 +267,9 @@ class MainActivity : ComponentActivity() {
                             onDecreaseQuantity = transactionViewModel::decreaseQuantity,
                             onRemoveItem = transactionViewModel::removeItem,
                             onBuyerNameChange = transactionViewModel::updateBuyerName,
+                            onBuyerContactChange = transactionViewModel::updateBuyerContact,
                             onPaymentMethodSelected = transactionViewModel::selectPaymentMethod,
+                            onDebtInitialPaymentMethodSelected = transactionViewModel::selectDebtInitialPaymentMethod,
                             onPaidAmountChange = transactionViewModel::updatePaidAmount,
                             onUseExactAmount = transactionViewModel::useExactAmount,
                             onCompleteTransaction = transactionViewModel::completeTransaction,
@@ -297,6 +302,9 @@ class MainActivity : ComponentActivity() {
                             onOpenHistory = { navigateTo(AppRoute.History.route) },
                             onRefresh = reportViewModel::loadTodaySummary,
                             onExportPdf = reportViewModel::exportReportPdf,
+                            onRecordDebtPayment = reportViewModel::recordDebtPayment,
+                            onDebtCustomerSelected = reportViewModel::openDebtCustomerDetail,
+                            onDismissDebtCustomerDetail = reportViewModel::dismissDebtCustomerDetail,
                             storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )

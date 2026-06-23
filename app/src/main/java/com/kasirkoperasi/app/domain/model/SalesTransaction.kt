@@ -4,11 +4,14 @@ data class SalesTransaction(
     val id: Long = 0L,
     val transactionNumber: String,
     val buyerName: String,
+    val buyerContact: String = "",
     val paymentMethod: String,
+    val paidPaymentMethod: String,
     val totalAmount: Long,
     val totalProfit: Long,
     val paidAmount: Long,
     val changeAmount: Long,
+    val debtAmount: Long,
     val itemCount: Int,
     val createdAtMillis: Long,
 )
@@ -34,6 +37,8 @@ data class SalesTransactionDraftItem(
 
 data class SalesTransactionPayment(
     val buyerName: String,
+    val buyerContact: String = "",
     val paymentMethod: String,
     val paidAmount: Long,
+    val paidPaymentMethod: String = "",
 )

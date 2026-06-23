@@ -31,6 +31,31 @@ interface SalesTransactionDao {
 
     @Query(
         """
+        SELECT * FROM sales_transactions
+        WHERE debt_amount > 0
+        ORDER BY created_at_millis DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun getDebtTransactions(limit: Int): List<SalesTransactionEntity>
+
+    @Query(
+        """
+        SELECT * FROM sales_transactions
+        WHERE debt_amount > 0
+            AND created_at_millis BETWEEN :startDateMillis AND :endDateMillis
+        ORDER BY created_at_millis DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun getDebtTransactionsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<SalesTransactionEntity>
+
+    @Query(
+        """
         SELECT * FROM sales_transaction_items
         WHERE transaction_id = :transactionId
         ORDER BY id ASC

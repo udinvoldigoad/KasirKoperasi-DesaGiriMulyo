@@ -17,5 +17,15 @@ interface SalesTransactionRepository {
         limit: Int,
     ): List<SalesTransaction>
 
+    suspend fun getDebtTransactions(
+        limit: Int,
+    ): List<SalesTransaction>
+
+    suspend fun getDebtTransactionsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<SalesTransaction>
+
     suspend fun getTransactionItems(transactionId: Long): List<SalesTransactionItem>
 }

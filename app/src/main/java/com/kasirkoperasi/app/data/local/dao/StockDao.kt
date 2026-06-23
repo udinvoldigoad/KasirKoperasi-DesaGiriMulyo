@@ -17,6 +17,20 @@ interface StockDao {
     )
     suspend fun getStockMovements(productId: Long?): List<StockMovementEntity>
 
+    @Query(
+        """
+        SELECT * FROM stock_movements
+        WHERE created_at_millis BETWEEN :startDateMillis AND :endDateMillis
+        ORDER BY created_at_millis DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun getStockMovementsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<StockMovementEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStockMovement(stockMovement: StockMovementEntity): Long
 }

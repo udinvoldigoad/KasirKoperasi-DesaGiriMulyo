@@ -647,8 +647,12 @@ private fun TransactionHistoryCard(
                     modifier = Modifier.weight(1f),
                 )
                 TransactionValue(
-                    label = "Kembalian",
-                    value = transaction.changeAmount.toRupiah(),
+                    label = if (transaction.debtAmount > 0L) "Sisa Hutang" else "Kembalian",
+                    value = if (transaction.debtAmount > 0L) {
+                        transaction.debtAmount.toRupiah()
+                    } else {
+                        transaction.changeAmount.toRupiah()
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -930,8 +934,12 @@ private fun TransactionDetailSummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 TransactionValue(
-                    label = "Kembalian",
-                    value = transaction.changeAmount.toRupiah(),
+                    label = if (transaction.debtAmount > 0L) "Sisa Hutang" else "Kembalian",
+                    value = if (transaction.debtAmount > 0L) {
+                        transaction.debtAmount.toRupiah()
+                    } else {
+                        transaction.changeAmount.toRupiah()
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 TransactionValue(
@@ -1081,7 +1089,12 @@ private fun PaymentBadge(
     method: String,
 ) {
     val isQris = method.equals("QRIS", ignoreCase = true)
-    val background = if (isQris) FreshMint else SoftGray
+    val isDebt = method.equals("Hutang", ignoreCase = true)
+    val background = when {
+        isQris -> FreshMint
+        isDebt -> DangerSoft
+        else -> SoftGray
+    }
     val contentColor = DeepGreen
 
     Surface(
@@ -1094,7 +1107,11 @@ private fun PaymentBadge(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (isQris) Icons.Outlined.CreditCard else Icons.Outlined.CalendarToday,
+                imageVector = when {
+                    isQris -> Icons.Outlined.CreditCard
+                    isDebt -> Icons.Outlined.CreditCard
+                    else -> Icons.Outlined.CalendarToday
+                },
                 contentDescription = null,
                 modifier = Modifier.size(15.dp),
                 tint = contentColor,
