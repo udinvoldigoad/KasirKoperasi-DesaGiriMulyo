@@ -107,9 +107,13 @@ fun HomeScreen(
     }
     val lowStock = lowStockProducts.size
     var showLowStockSheet by rememberSaveable { mutableStateOf(false) }
+    var showInfoSheet by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = showLowStockSheet) {
-        showLowStockSheet = false
+    BackHandler(enabled = showLowStockSheet || showInfoSheet) {
+        when {
+            showInfoSheet -> showInfoSheet = false
+            showLowStockSheet -> showLowStockSheet = false
+        }
     }
 
     Scaffold(
@@ -119,6 +123,7 @@ fun HomeScreen(
             HomeTopBar(
                 storeName = storeName,
                 storeLogoUri = storeLogoUri,
+                onInfoClick = { showInfoSheet = true },
             )
         },
         bottomBar = {
@@ -191,12 +196,19 @@ fun HomeScreen(
             onDismiss = { showLowStockSheet = false },
         )
     }
+
+    if (showInfoSheet) {
+        HomeInfoSheet(
+            onDismiss = { showInfoSheet = false },
+        )
+    }
 }
 
 @Composable
 private fun HomeTopBar(
     storeName: String,
     storeLogoUri: String?,
+    onInfoClick: () -> Unit,
 ) {
     Surface(
         color = CreamBackground,
@@ -231,7 +243,11 @@ private fun HomeTopBar(
                 )
 
                 Box(
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(DeepGreen.copy(alpha = 0.10f))
+                        .clickable { onInfoClick() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -240,6 +256,269 @@ private fun HomeTopBar(
                         modifier = Modifier.size(28.dp),
                         tint = Color(0xFF303A34),
                     )
+                }
+            }
+        }
+    }
+}
+
+private data class HomeGuideItem(
+    val title: String,
+    val description: String,
+    val steps: List<String>,
+    val icon: ImageVector,
+)
+
+private fun homeGuideItems(): List<HomeGuideItem> = listOf(
+    HomeGuideItem(
+        title = "Mulai Transaksi",
+        description = "Dipakai kasir saat melayani pembeli.",
+        steps = listOf(
+            "Buka menu Transaksi.",
+            "Pilih barang atau scan barcode rak.",
+            "Cek isi keranjang, lalu tekan Bayar.",
+            "Pilih Cash, QRIS, atau Hutang sesuai pembayaran.",
+            "Setelah berhasil, gunakan tombol Print jika printer sudah tersambung.",
+        ),
+        icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+    ),
+    HomeGuideItem(
+        title = "Data Barang dan Stok",
+        description = "Semua produk, harga, foto, barcode, dan stok dikelola dari menu Produk.",
+        steps = listOf(
+            "Tambah produk baru dari menu Produk.",
+            "Isi nama, kategori, harga beli, harga jual, stok, satuan, dan barcode 4 angka.",
+            "Klik kartu barang untuk mengedit data atau menambah stok masuk.",
+            "Barang stok kosong akan dibuat abu-abu di Transaksi dan tidak bisa masuk keranjang.",
+        ),
+        icon = Icons.Outlined.Inventory2,
+    ),
+    HomeGuideItem(
+        title = "Barcode Rak",
+        description = "Barcode dipakai untuk mempercepat pemilihan barang.",
+        steps = listOf(
+            "Setiap produk punya kode barcode 4 angka.",
+            "Cetak barcode massal dari Pengaturan lalu tempel di rak.",
+            "Tombol Scan Barcode di Beranda atau Transaksi akan mencari produk berdasarkan kode itu.",
+            "Jika kode tidak terdaftar, aplikasi menampilkan pesan barang belum terdaftar.",
+        ),
+        icon = Icons.Outlined.QrCodeScanner,
+    ),
+    HomeGuideItem(
+        title = "Hutang dan Pelunasan",
+        description = "Hutang dicatat agar sisa pembayaran pembeli tetap terlihat di laporan.",
+        steps = listOf(
+            "Pilih metode Hutang saat pembeli belum membayar penuh.",
+            "Nama pembeli wajib diisi untuk transaksi hutang.",
+            "Nominal yang dibayar boleh berapa saja sesuai kondisi toko.",
+            "Pelunasan hutang dicatat dari menu Laporan agar riwayat pembayaran jelas.",
+        ),
+        icon = Icons.Outlined.BarChart,
+    ),
+    HomeGuideItem(
+        title = "Laporan dan Riwayat",
+        description = "Dipakai untuk melihat pembukuan harian, mingguan, dan bulanan.",
+        steps = listOf(
+            "Buka Laporan untuk melihat penjualan, profit, item terjual, dan stok.",
+            "Riwayat menampilkan daftar transaksi beserta detail barangnya.",
+            "Export PDF tersedia untuk periode hari ini, 7 hari, atau bulan berjalan.",
+            "PDF berisi transaksi, hutang, pembayaran hutang, dan laporan stok.",
+        ),
+        icon = Icons.Outlined.BarChart,
+    ),
+    HomeGuideItem(
+        title = "Printer Struk",
+        description = "Printer thermal diatur dari menu Pengaturan.",
+        steps = listOf(
+            "Pairing printer lewat Bluetooth HP terlebih dahulu.",
+            "Buka Pengaturan, pilih printer, lalu sambungkan.",
+            "Jika transaksi berhasil, tombol Print akan mencetak struk ke printer yang aktif.",
+            "Jika printer tidak mencetak, cek baterai, kertas, pairing Bluetooth, dan pilihan printer.",
+        ),
+        icon = Icons.Outlined.Settings,
+    ),
+    HomeGuideItem(
+        title = "Backup dan Restore",
+        description = "Fitur ini penting karena data disimpan offline di perangkat.",
+        steps = listOf(
+            "Backup Data membuat file ZIP di folder Download/KasirKoperasi.",
+            "File backup berisi database, foto produk, logo toko, dan pengaturan.",
+            "Restore Data akan mengganti data aplikasi dengan isi file backup.",
+            "Lakukan backup rutin, terutama sebelum servis HP atau pindah perangkat.",
+        ),
+        icon = Icons.Outlined.Settings,
+    ),
+    HomeGuideItem(
+        title = "Tips Operasional",
+        description = "Kebiasaan kecil ini mengurangi risiko salah input dan kehilangan data.",
+        steps = listOf(
+            "Cek stok menipis dari Beranda sebelum toko ramai.",
+            "Gunakan foto produk agar kasir lebih mudah mengenali barang.",
+            "Pastikan nama pembeli hutang selalu konsisten.",
+            "Jangan hapus folder foto aplikasi secara manual dari file manager.",
+        ),
+        icon = Icons.Outlined.Info,
+    ),
+)
+
+@Composable
+private fun HomeInfoSheet(
+    onDismiss: () -> Unit,
+) {
+    val panelHeightFraction = 0.88f
+
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(1f - panelHeightFraction)
+                    .dismissPanelOnTap(onDismiss),
+            )
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(panelHeightFraction),
+                color = CreamBackground,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                shadowElevation = 12.dp,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    HomePanelHandle(onDismiss = onDismiss)
+
+                    Text(
+                        text = "Panduan KasirKoperasi",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Text(
+                        text = "Ringkasan cara memakai fitur utama aplikasi untuk operasional koperasi.",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                    ) {
+                        items(
+                            items = homeGuideItems(),
+                            key = { it.title },
+                        ) { item ->
+                            HomeGuideCard(item = item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeGuideCard(
+    item: HomeGuideItem,
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(DeepGreen.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = DeepGreen,
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = item.title,
+                        color = Color(0xFF17221B),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = item.description,
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item.steps.forEachIndexed { index, step ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(DeepGreen.copy(alpha = 0.10f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = (index + 1).toString(),
+                                color = DeepGreen,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+
+                        Text(
+                            text = step,
+                            modifier = Modifier.weight(1f),
+                            color = Color(0xFF303A34),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         }

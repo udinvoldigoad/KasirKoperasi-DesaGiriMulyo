@@ -87,6 +87,8 @@ fun SettingsScreen(
     onImportCsvSelected: (Uri) -> Unit,
     onGenerateBarcodeSheet: () -> Unit,
     onCleanupProductImages: () -> Unit,
+    onBackupData: () -> Unit,
+    onRestoreBackupSelected: (Uri) -> Unit,
     onLoadPrinters: () -> Unit,
     onPrinterSelected: (BluetoothPrinterDevice) -> Unit,
     onTestPrinter: () -> Unit,
@@ -107,6 +109,11 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         uri?.let(onImportCsvSelected)
+    }
+    val backupRestoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let(onRestoreBackupSelected)
     }
     val printerPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -221,10 +228,20 @@ fun SettingsScreen(
                     DataProductSettingsCard(
                         isImporting = uiState.isImporting,
                         isCleaningImages = uiState.isCleaningImages,
-                        canImport = !uiState.isSaving && !uiState.isImporting && !uiState.isCleaningImages,
+                        isBackingUp = uiState.isBackingUp,
+                        isRestoring = uiState.isRestoring,
+                        canImport = !uiState.isSaving &&
+                            !uiState.isImporting &&
+                            !uiState.isCleaningImages &&
+                            !uiState.isBackingUp &&
+                            !uiState.isRestoring,
                         canGenerateBarcodeSheet = canGenerateBarcodeSheet,
                         onGenerateBarcodeSheetClick = onGenerateBarcodeSheet,
                         onCleanupProductImagesClick = onCleanupProductImages,
+                        onBackupDataClick = onBackupData,
+                        onRestoreBackupClick = {
+                            backupRestoreLauncher.launch(BACKUP_MIME_TYPES)
+                        },
                         onImportClick = {
                             csvImportLauncher.launch(CSV_MIME_TYPES)
                         },
@@ -923,10 +940,14 @@ private fun SettingsActionCard(
 private fun DataProductSettingsCard(
     isImporting: Boolean,
     isCleaningImages: Boolean,
+    isBackingUp: Boolean,
+    isRestoring: Boolean,
     canImport: Boolean,
     canGenerateBarcodeSheet: Boolean,
     onGenerateBarcodeSheetClick: () -> Unit,
     onCleanupProductImagesClick: () -> Unit,
+    onBackupDataClick: () -> Unit,
+    onRestoreBackupClick: () -> Unit,
     onImportClick: () -> Unit,
 ) {
     Card(
@@ -951,7 +972,7 @@ private fun DataProductSettingsCard(
                 title = "Generate Barcode Produk A4",
                 description = "Membuat PDF A4 berisi barcode garis semua produk.",
                 icon = Icons.Outlined.QrCodeScanner,
-                enabled = canGenerateBarcodeSheet,
+                enabled = canGenerateBarcodeSheet && !isRestoring && !isBackingUp && !isImporting && !isCleaningImages,
                 isPrimary = true,
                 actionLabel = if (canGenerateBarcodeSheet) "Buat PDF Barcode" else "Belum ada barcode",
                 onClick = onGenerateBarcodeSheetClick,
@@ -971,7 +992,7 @@ private fun DataProductSettingsCard(
                 title = "Bersihkan Foto Produk",
                 description = "Hapus cache kamera dan file foto lama yang sudah tidak dipakai produk.",
                 icon = Icons.Outlined.PhotoLibrary,
-                enabled = !isImporting && !isCleaningImages,
+                enabled = !isImporting && !isCleaningImages && !isBackingUp && !isRestoring,
                 isPrimary = false,
                 actionLabel = if (isCleaningImages) "Membersihkan..." else "Bersihkan",
                 onClick = onCleanupProductImagesClick,
@@ -979,12 +1000,22 @@ private fun DataProductSettingsCard(
 
             DataToolRow(
                 title = "Backup Data",
-                description = "Nanti dipakai untuk menyimpan cadangan data toko dari perangkat ini.",
+                description = "Simpan database, foto produk, logo, nama toko, dan printer ke file ZIP.",
                 icon = Icons.Outlined.FileUpload,
-                enabled = false,
+                enabled = !isImporting && !isCleaningImages && !isBackingUp && !isRestoring,
+                isPrimary = true,
+                actionLabel = if (isBackingUp) "Membuat..." else "Buat Backup",
+                onClick = onBackupDataClick,
+            )
+
+            DataToolRow(
+                title = "Restore Data",
+                description = "Pulihkan file backup ZIP. Data di perangkat ini akan diganti oleh isi backup.",
+                icon = Icons.Outlined.Refresh,
+                enabled = !isImporting && !isCleaningImages && !isBackingUp && !isRestoring,
                 isPrimary = false,
-                actionLabel = "Belum tersedia",
-                onClick = {},
+                actionLabel = if (isRestoring) "Memulihkan..." else "Pilih Backup",
+                onClick = onRestoreBackupClick,
             )
         }
     }
@@ -1093,6 +1124,12 @@ private val CSV_MIME_TYPES = arrayOf(
     "application/csv",
     "application/vnd.ms-excel",
     "application/octet-stream",
+)
+
+private val BACKUP_MIME_TYPES = arrayOf(
+    "application/zip",
+    "application/octet-stream",
+    "application/x-zip-compressed",
 )
 
 private enum class PrinterPermissionAction {

@@ -46,6 +46,7 @@ import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy {
@@ -311,6 +312,18 @@ class MainActivity : ComponentActivity() {
                     }
 
                     AppRoute.Settings.route -> {
+                        LaunchedEffect(settingsUiState.restoreCompletedSignal) {
+                            if (settingsUiState.restoreCompletedSignal > 0) {
+                                Toast.makeText(
+                                    context,
+                                    "Restore selesai. Aplikasi dimuat ulang.",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                                delay(900)
+                                restartApp()
+                            }
+                        }
+
                         SettingsScreen(
                             uiState = settingsUiState,
                             selectedRoute = selectedRoute,
@@ -326,6 +339,8 @@ class MainActivity : ComponentActivity() {
                                         .toSet(),
                                 )
                             },
+                            onBackupData = settingsViewModel::backupData,
+                            onRestoreBackupSelected = settingsViewModel::restoreData,
                             onLoadPrinters = settingsViewModel::loadPairedPrinters,
                             onPrinterSelected = settingsViewModel::selectPrinter,
                             onTestPrinter = settingsViewModel::testPrintSelectedPrinter,
@@ -373,6 +388,20 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Bagikan laporan PDF"))
+    }
+
+    private fun restartApp() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+        }
+        finish()
+        Runtime.getRuntime().exit(0)
     }
 }
 

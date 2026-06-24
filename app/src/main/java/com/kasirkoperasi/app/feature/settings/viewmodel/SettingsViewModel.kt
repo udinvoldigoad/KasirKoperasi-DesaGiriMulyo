@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kasirkoperasi.app.core.backup.OfflineBackupExporter
+import com.kasirkoperasi.app.core.backup.OfflineBackupRestorer
 import com.kasirkoperasi.app.core.common.AppResult
 import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.printer.BluetoothEscPosPrinter
@@ -29,6 +31,8 @@ class SettingsViewModel(
     private val importProductsCsvUseCase: ImportProductsCsvUseCase,
 ) : ViewModel() {
     private val appContext = context.applicationContext
+    private val offlineBackupExporter = OfflineBackupExporter(appContext)
+    private val offlineBackupRestorer = OfflineBackupRestorer(appContext)
     private val _uiState = MutableStateFlow(StoreProfileStore.load(appContext).toUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -192,6 +196,71 @@ class SettingsViewModel(
         }
     }
 
+    fun backupData() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBackingUp = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    offlineBackupExporter.export()
+                }
+            }.onSuccess { result ->
+                _uiState.update {
+                    it.copy(
+                        isBackingUp = false,
+                        successMessage = "Backup tersimpan: ${result.locationText}",
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isBackingUp = false,
+                        errorMessage = throwable.message ?: "Gagal membuat backup data",
+                    )
+                }
+            }
+        }
+    }
+
+    fun restoreData(sourceUri: Uri) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isRestoring = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    offlineBackupRestorer.restore(sourceUri)
+                }
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isRestoring = false,
+                        successMessage = "Restore data berhasil. Aplikasi akan dimuat ulang.",
+                        restoreCompletedSignal = it.restoreCompletedSignal + 1,
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isRestoring = false,
+                        errorMessage = throwable.message ?: "Gagal restore data",
+                    )
+                }
+            }
+        }
+    }
+
     fun loadPairedPrinters() {
         viewModelScope.launch {
             _uiState.update {
@@ -319,6 +388,8 @@ class SettingsViewModel(
             isSaving = false,
             isImporting = false,
             isCleaningImages = false,
+            isBackingUp = false,
+            isRestoring = false,
             selectedPrinterName = printerConnection?.name,
             selectedPrinterAddress = printerConnection?.address,
             successMessage = successMessage,

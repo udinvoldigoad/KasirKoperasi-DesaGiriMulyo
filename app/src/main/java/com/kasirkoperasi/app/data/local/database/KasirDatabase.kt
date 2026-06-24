@@ -25,7 +25,7 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
         SalesTransactionItemEntity::class,
         DebtPaymentEntity::class,
     ],
-    version = 9,
+    version = DatabaseConfig.DATABASE_VERSION,
     exportSchema = false,
 )
 abstract class KasirDatabase : RoomDatabase() {
@@ -62,6 +62,13 @@ abstract class KasirDatabase : RoomDatabase() {
                     )
                     .build()
                     .also { instance = it }
+            }
+        }
+
+        fun closeInstance() {
+            synchronized(this) {
+                instance?.close()
+                instance = null
             }
         }
 
