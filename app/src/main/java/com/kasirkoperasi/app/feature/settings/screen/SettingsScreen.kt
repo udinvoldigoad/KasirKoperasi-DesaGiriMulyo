@@ -86,6 +86,7 @@ fun SettingsScreen(
     onLogoSelected: (Uri) -> Unit,
     onImportCsvSelected: (Uri) -> Unit,
     onGenerateBarcodeSheet: () -> Unit,
+    onCleanupProductImages: () -> Unit,
     onLoadPrinters: () -> Unit,
     onPrinterSelected: (BluetoothPrinterDevice) -> Unit,
     onTestPrinter: () -> Unit,
@@ -219,9 +220,11 @@ fun SettingsScreen(
                 item {
                     DataProductSettingsCard(
                         isImporting = uiState.isImporting,
-                        canImport = !uiState.isSaving && !uiState.isImporting,
+                        isCleaningImages = uiState.isCleaningImages,
+                        canImport = !uiState.isSaving && !uiState.isImporting && !uiState.isCleaningImages,
                         canGenerateBarcodeSheet = canGenerateBarcodeSheet,
                         onGenerateBarcodeSheetClick = onGenerateBarcodeSheet,
+                        onCleanupProductImagesClick = onCleanupProductImages,
                         onImportClick = {
                             csvImportLauncher.launch(CSV_MIME_TYPES)
                         },
@@ -919,9 +922,11 @@ private fun SettingsActionCard(
 @Composable
 private fun DataProductSettingsCard(
     isImporting: Boolean,
+    isCleaningImages: Boolean,
     canImport: Boolean,
     canGenerateBarcodeSheet: Boolean,
     onGenerateBarcodeSheetClick: () -> Unit,
+    onCleanupProductImagesClick: () -> Unit,
     onImportClick: () -> Unit,
 ) {
     Card(
@@ -960,6 +965,16 @@ private fun DataProductSettingsCard(
                 isPrimary = true,
                 actionLabel = if (isImporting) "Sedang import..." else "Pilih File CSV",
                 onClick = onImportClick,
+            )
+
+            DataToolRow(
+                title = "Bersihkan Foto Produk",
+                description = "Hapus cache kamera dan file foto lama yang sudah tidak dipakai produk.",
+                icon = Icons.Outlined.PhotoLibrary,
+                enabled = !isImporting && !isCleaningImages,
+                isPrimary = false,
+                actionLabel = if (isCleaningImages) "Membersihkan..." else "Bersihkan",
+                onClick = onCleanupProductImagesClick,
             )
 
             DataToolRow(

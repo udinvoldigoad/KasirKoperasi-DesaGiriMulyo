@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kasirkoperasi.app.core.common.AppResult
+import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.printer.BluetoothEscPosPrinter
 import com.kasirkoperasi.app.core.printer.BluetoothPrinterDevice
 import com.kasirkoperasi.app.core.printer.BluetoothPrinterDiscovery
@@ -152,6 +153,45 @@ class SettingsViewModel(
         }
     }
 
+    fun cleanupProductImages(activeImageUris: Set<String>) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isCleaningImages = true,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ProductImageStore.cleanupUnusedImages(
+                        context = appContext,
+                        activeImageUris = activeImageUris,
+                    )
+                }
+            }.onSuccess { result ->
+                _uiState.update {
+                    it.copy(
+                        isCleaningImages = false,
+                        successMessage = if (result.deletedCount > 0) {
+                            "Pembersihan selesai: ${result.deletedCount} file dihapus, ${result.freedBytes.toReadableSize()} dikosongkan"
+                        } else {
+                            "Tidak ada foto produk lama yang perlu dibersihkan"
+                        },
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isCleaningImages = false,
+                        errorMessage = throwable.message ?: "Gagal membersihkan foto produk",
+                    )
+                }
+            }
+        }
+    }
+
     fun loadPairedPrinters() {
         viewModelScope.launch {
             _uiState.update {
@@ -278,6 +318,7 @@ class SettingsViewModel(
             logoUri = logoUri,
             isSaving = false,
             isImporting = false,
+            isCleaningImages = false,
             selectedPrinterName = printerConnection?.name,
             selectedPrinterAddress = printerConnection?.address,
             successMessage = successMessage,
@@ -301,5 +342,13 @@ class SettingsViewModel(
             .take(3)
             .joinToString("; ") { "baris ${it.rowNumber}: ${it.reason}" }
         return "$baseMessage, $skippedCount dilewati. $firstIssues"
+    }
+
+    private fun Long.toReadableSize(): String {
+        return when {
+            this >= 1_048_576L -> "${this / 1_048_576L} MB"
+            this >= 1_024L -> "${this / 1_024L} KB"
+            else -> "$this byte"
+        }
     }
 }

@@ -76,7 +76,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
 import com.kasirkoperasi.app.core.ui.MoneyInputField
+import com.kasirkoperasi.app.core.ui.dismissPanelOnTap
 import com.kasirkoperasi.app.domain.model.DebtCustomerDetail
 import com.kasirkoperasi.app.domain.model.DebtPayment
 import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
@@ -359,16 +361,17 @@ private fun ModernLoadingModal(
     title: String,
     caption: String,
 ) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
-        exit = fadeOut(animationSpec = tween(durationMillis = 120)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = {}) {
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 120)),
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.28f))
-                .clickable(enabled = false) { },
+                .clickable { },
             contentAlignment = Alignment.Center,
         ) {
             Surface(
@@ -411,6 +414,7 @@ private fun ModernLoadingModal(
                 }
             }
         }
+    }
     }
 }
 
@@ -865,15 +869,16 @@ private fun DebtCustomerDetailPanel(
     onPayDebtClick: (DebtCustomerSummary) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -953,6 +958,7 @@ private fun DebtCustomerDetailPanel(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -1312,15 +1318,16 @@ private fun DebtPaymentPanel(
     onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -1428,6 +1435,7 @@ private fun DebtPaymentPanel(
                 }
             }
         }
+        }
     }
 }
 
@@ -1502,15 +1510,16 @@ private fun ExportRangePanel(
     onDismiss: () -> Unit,
     onRangeSelected: (ReportExportRange) -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -1561,6 +1570,7 @@ private fun ExportRangePanel(
                     }
                 }
             }
+        }
         }
     }
 }

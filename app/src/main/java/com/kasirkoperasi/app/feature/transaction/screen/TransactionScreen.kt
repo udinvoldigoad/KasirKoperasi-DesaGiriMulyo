@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -79,6 +80,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -92,7 +94,9 @@ import com.kasirkoperasi.app.core.printer.ReceiptPrintData
 import com.kasirkoperasi.app.core.printer.ReceiptPrintItem
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
 import com.kasirkoperasi.app.core.ui.MoneyInputField
+import com.kasirkoperasi.app.core.ui.dismissPanelOnTap
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.feature.transaction.state.CartItem
 import com.kasirkoperasi.app.feature.transaction.state.DebtInitialPaymentMethod
@@ -138,6 +142,7 @@ fun TransactionScreen(
     storeLogoUri: String? = null,
 ) {
     var activeSheet by remember { mutableStateOf<TransactionSheet?>(null) }
+    var activeMoneyInputId by remember { mutableStateOf<String?>(null) }
     var isSuccessDialogVisible by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
     var outOfStockMessage by remember { mutableStateOf<String?>(null) }
@@ -212,6 +217,7 @@ fun TransactionScreen(
 
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
+            activeMoneyInputId = null
             activeSheet = null
             isSuccessDialogVisible = true
             printMessage = null
@@ -222,7 +228,14 @@ fun TransactionScreen(
 
     LaunchedEffect(uiState.cartItems.isEmpty()) {
         if (uiState.cartItems.isEmpty() && activeSheet == TransactionSheet.Cart) {
+            activeMoneyInputId = null
             activeSheet = null
+        }
+    }
+
+    LaunchedEffect(activeSheet) {
+        if (activeSheet != TransactionSheet.Payment) {
+            activeMoneyInputId = null
         }
     }
 
@@ -267,7 +280,11 @@ fun TransactionScreen(
         onClearMessage()
     }
     BackHandler(enabled = activeSheet != null) {
-        activeSheet = null
+        if (activeMoneyInputId != null) {
+            activeMoneyInputId = null
+        } else {
+            activeSheet = null
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -382,7 +399,10 @@ fun TransactionScreen(
 
             activeSheet?.let { sheet ->
                 TransactionPanelOverlay(
-                    onDismiss = { activeSheet = null },
+                    onDismiss = {
+                        activeMoneyInputId = null
+                        activeSheet = null
+                    },
                 ) {
                     when (sheet) {
                         TransactionSheet.Cart -> {
@@ -410,6 +430,7 @@ fun TransactionScreen(
                                 onPaidAmountChange = onPaidAmountChange,
                                 onUseExactAmount = onUseExactAmount,
                                 onBackToCart = {
+                                    activeMoneyInputId = null
                                     if (uiState.cartItems.isNotEmpty()) {
                                         activeSheet = TransactionSheet.Cart
                                     } else {
@@ -417,7 +438,12 @@ fun TransactionScreen(
                                     }
                                 },
                                 onCompleteTransaction = onCompleteTransaction,
-                                onDismiss = { activeSheet = null },
+                                activeMoneyInputId = activeMoneyInputId,
+                                onActiveMoneyInputChange = { activeMoneyInputId = it },
+                                onDismiss = {
+                                    activeMoneyInputId = null
+                                    activeSheet = null
+                                },
                             )
                         }
                     }
@@ -496,11 +522,12 @@ private fun TransactionSuccessDialog(
     onPrint: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
+        Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.24f))
-            .clickable { onDismiss() },
+            .dismissPanelOnTap(onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
@@ -613,6 +640,8 @@ private fun TransactionSuccessDialog(
             }
         }
     }
+}
+
 }
 
 @Composable
@@ -812,27 +841,30 @@ private fun TransactionPanelOverlay(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
-        )
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.82f)
-                .clickable { },
-            color = CreamBackground,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            shadowElevation = 12.dp,
+                .background(Color.Black.copy(alpha = 0.34f)),
         ) {
-            content()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(1f - TRANSACTION_PANEL_HEIGHT_FRACTION)
+                    .dismissPanelOnTap(onDismiss),
+            )
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(TRANSACTION_PANEL_HEIGHT_FRACTION),
+                color = CreamBackground,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                shadowElevation = 12.dp,
+            ) {
+                content()
+            }
         }
     }
 }
@@ -1009,8 +1041,28 @@ private fun PaymentSheetContent(
     onUseExactAmount: () -> Unit,
     onBackToCart: () -> Unit,
     onCompleteTransaction: () -> Unit,
+    activeMoneyInputId: String?,
+    onActiveMoneyInputChange: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val isMoneyKeypadVisible = activeMoneyInputId == PAYMENT_MONEY_INPUT_ID
+    val paymentListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val moneySectionScrollOffset = with(LocalDensity.current) {
+        MONEY_SECTION_SCROLL_OFFSET.roundToPx()
+    }
+
+    LaunchedEffect(isMoneyKeypadVisible) {
+        if (isMoneyKeypadVisible) {
+            coroutineScope.launch {
+                paymentListState.animateScrollToItem(
+                    index = PAYMENT_MONEY_SECTION_INDEX,
+                    scrollOffset = moneySectionScrollOffset,
+                )
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1058,10 +1110,13 @@ private fun PaymentSheetContent(
         }
 
         LazyColumn(
+            state = paymentListState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(bottom = 4.dp),
+            contentPadding = PaddingValues(
+                bottom = if (isMoneyKeypadVisible) MONEY_KEYPAD_BOTTOM_SPACE else 4.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
@@ -1163,6 +1218,9 @@ private fun PaymentSheetContent(
                                 "Uang dibayarkan"
                             },
                             leadingIcon = { Text("Rp") },
+                            inputId = PAYMENT_MONEY_INPUT_ID,
+                            activeInputId = activeMoneyInputId,
+                            onActiveInputChange = onActiveMoneyInputChange,
                             trailingContent = {
                                 Button(
                                     onClick = onUseExactAmount,
@@ -2099,3 +2157,8 @@ private fun TransactionUiState.toReceiptPrintData(storeName: String): ReceiptPri
 }
 
 private const val THERMAL_PRINTER_NAME = "IDY01POS-58B"
+private const val TRANSACTION_PANEL_HEIGHT_FRACTION = 0.82f
+private const val PAYMENT_MONEY_INPUT_ID = "transaction_payment_money"
+private const val PAYMENT_MONEY_SECTION_INDEX = 3
+private val MONEY_KEYPAD_BOTTOM_SPACE = 420.dp
+private val MONEY_SECTION_SCROLL_OFFSET = 112.dp

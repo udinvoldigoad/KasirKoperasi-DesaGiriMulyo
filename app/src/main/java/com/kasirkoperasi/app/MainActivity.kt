@@ -319,6 +319,13 @@ class MainActivity : ComponentActivity() {
                             onLogoSelected = settingsViewModel::saveLogo,
                             onImportCsvSelected = settingsViewModel::importProductsCsv,
                             onGenerateBarcodeSheet = generateProductBarcodeSheet,
+                            onCleanupProductImages = {
+                                settingsViewModel.cleanupProductImages(
+                                    productUiState.products
+                                        .mapNotNull { it.imageUri }
+                                        .toSet(),
+                                )
+                            },
                             onLoadPrinters = settingsViewModel::loadPairedPrinters,
                             onPrinterSelected = settingsViewModel::selectPrinter,
                             onTestPrinter = settingsViewModel::testPrintSelectedPrinter,

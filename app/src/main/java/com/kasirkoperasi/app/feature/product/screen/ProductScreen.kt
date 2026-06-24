@@ -87,7 +87,9 @@ import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
 import com.kasirkoperasi.app.core.ui.MoneyInputField
+import com.kasirkoperasi.app.core.ui.dismissPanelOnTap
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.ProductCategory
 import com.kasirkoperasi.app.feature.product.state.ProductUiState
@@ -651,15 +653,16 @@ private fun ProductEditSheet(
         onDismiss()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -890,6 +893,7 @@ private fun ProductEditSheet(
                 },
             )
         }
+        }
     }
 }
 
@@ -1004,15 +1008,16 @@ private fun ProductImageSourcePanel(
 ) {
     BackHandler(onBack = onDismiss)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -1057,6 +1062,7 @@ private fun ProductImageSourcePanel(
                     onClick = onPickFromGallery,
                 )
             }
+        }
         }
     }
 }
@@ -1185,15 +1191,16 @@ private fun ProductStockFilterPanel(
 
     BackHandler(onBack = onDismiss)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -1267,6 +1274,7 @@ private fun ProductStockFilterPanel(
                     }
                 }
             }
+        }
         }
     }
 }

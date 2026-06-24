@@ -9,6 +9,11 @@ import java.io.File
 import java.io.FileOutputStream
 
 object ProductImageStore {
+    data class CleanupResult(
+        val deletedCount: Int,
+        val freedBytes: Long,
+    )
+
     fun createCameraImageUri(context: Context): Uri {
         val directory = File(context.cacheDir, CAMERA_DIRECTORY).apply {
             mkdirs()
@@ -26,7 +31,7 @@ object ProductImageStore {
         val directory = File(context.filesDir, PRODUCT_IMAGE_DIRECTORY).apply {
             mkdirs()
         }
-        val targetFile = File(directory, "product-${System.currentTimeMillis()}.jpg")
+        val targetFile = File(directory, "product-${System.currentTimeMillis()}.webp")
 
         val bounds = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -44,13 +49,14 @@ object ProductImageStore {
 
         val outputBitmap = decodedBitmap.scaleDown(SAVED_IMAGE_MAX_SIZE)
         FileOutputStream(targetFile).use { output ->
-            outputBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+            outputBitmap.compress(Bitmap.CompressFormat.WEBP, WEBP_QUALITY, output)
         }
 
         if (outputBitmap != decodedBitmap) {
             outputBitmap.recycle()
         }
         decodedBitmap.recycle()
+        clearCameraCache(context)
 
         return Uri.fromFile(targetFile).toString()
     }
@@ -90,6 +96,61 @@ object ProductImageStore {
         }.getOrNull()
     }
 
+    fun cleanupUnusedImages(
+        context: Context,
+        activeImageUris: Set<String>,
+    ): CleanupResult {
+        val directory = File(context.filesDir, PRODUCT_IMAGE_DIRECTORY)
+        val cameraCleanup = clearCameraCache(context)
+        if (!directory.exists()) return cameraCleanup
+
+        var deletedCount = 0
+        var freedBytes = 0L
+        val activeFiles = activeImageUris
+            .mapNotNull { imageUri -> imageUri.toOwnedProductImageFileOrNull() }
+            .map { it.canonicalPath }
+            .toSet()
+
+        directory.listFiles()
+            .orEmpty()
+            .filter { file -> file.isFile && file.canonicalPath !in activeFiles }
+            .forEach { file ->
+                val fileSize = file.length()
+                if (file.delete()) {
+                    deletedCount += 1
+                    freedBytes += fileSize
+                }
+            }
+
+        return CleanupResult(
+            deletedCount = deletedCount + cameraCleanup.deletedCount,
+            freedBytes = freedBytes + cameraCleanup.freedBytes,
+        )
+    }
+
+    private fun clearCameraCache(context: Context): CleanupResult {
+        val directory = File(context.cacheDir, CAMERA_DIRECTORY)
+        if (!directory.exists()) return CleanupResult(deletedCount = 0, freedBytes = 0L)
+
+        var deletedCount = 0
+        var freedBytes = 0L
+        directory.listFiles()
+            .orEmpty()
+            .filter { it.isFile }
+            .forEach { file ->
+                val fileSize = file.length()
+                if (file.delete()) {
+                    deletedCount += 1
+                    freedBytes += fileSize
+                }
+            }
+
+        return CleanupResult(
+            deletedCount = deletedCount,
+            freedBytes = freedBytes,
+        )
+    }
+
     private fun BitmapFactory.Options.calculateInSampleSize(
         requestedWidth: Int,
         requestedHeight: Int,
@@ -120,9 +181,19 @@ object ProductImageStore {
         return Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
     }
 
+    private fun String.toOwnedProductImageFileOrNull(): File? {
+        val uri = Uri.parse(this)
+        if (uri.scheme != "file") return null
+
+        val file = File(uri.path ?: return null)
+        return file.takeIf {
+            it.parentFile?.name == PRODUCT_IMAGE_DIRECTORY
+        }
+    }
+
     private const val CAMERA_DIRECTORY = "camera"
     private const val PRODUCT_IMAGE_DIRECTORY = "product_images"
     private const val DEFAULT_TARGET_SIZE = 512
     private const val SAVED_IMAGE_MAX_SIZE = 512
-    private const val JPEG_QUALITY = 75
+    private const val WEBP_QUALITY = 75
 }

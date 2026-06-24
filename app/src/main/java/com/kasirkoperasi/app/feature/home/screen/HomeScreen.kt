@@ -2,6 +2,7 @@ package com.kasirkoperasi.app.feature.home.screen
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -53,16 +54,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
+import com.kasirkoperasi.app.core.ui.dismissPanelOnTap
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.ReportSummary
 import com.kasirkoperasi.app.feature.product.state.ProductUiState
@@ -99,6 +107,10 @@ fun HomeScreen(
     }
     val lowStock = lowStockProducts.size
     var showLowStockSheet by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = showLowStockSheet) {
+        showLowStockSheet = false
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -413,69 +425,69 @@ private fun LowStockSheet(
     products: List<Product>,
     onDismiss: () -> Unit,
 ) {
-    BackHandler(onBack = onDismiss)
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
-        )
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.72f)
-                .clickable { },
-            color = CreamBackground,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            shadowElevation = 12.dp,
+                .background(Color.Black.copy(alpha = 0.34f)),
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .navigationBarsPadding()
-                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                    .dismissPanelOnTap(onDismiss),
+            )
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.72f)
+                    .clickable { },
+                color = CreamBackground,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                shadowElevation = 12.dp,
             ) {
-                HomePanelHandle(onDismiss = onDismiss)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    HomePanelHandle(onDismiss = onDismiss)
 
-                Text(
-                    text = "Stok Menipis",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = DeepGreen,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
+                    Text(
+                        text = "Stok Menipis",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
 
-                Text(
-                    text = "Barang dengan stok 5 atau kurang.",
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MutedText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
+                    Text(
+                        text = "Barang dengan stok 5 atau kurang.",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
 
-                if (products.isEmpty()) {
-                    EmptyLowStockCard()
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(
-                            items = products,
-                            key = { it.id },
-                        ) { product ->
-                            LowStockProductRow(product = product)
+                    if (products.isEmpty()) {
+                        EmptyLowStockCard()
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(
+                                items = products,
+                                key = { it.id },
+                            ) { product ->
+                                LowStockProductRow(product = product)
+                            }
                         }
                     }
                 }
@@ -539,6 +551,13 @@ private fun EmptyLowStockCard() {
 
 @Composable
 private fun LowStockProductRow(product: Product) {
+    val context = LocalContext.current
+    val productBitmap = remember(product.imageUri) {
+        product.imageUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ProductImageStore.loadBitmap(context = context, imageUri = it, targetSize = 120) }
+    }
+
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -555,15 +574,25 @@ private fun LowStockProductRow(product: Product) {
             Box(
                 modifier = Modifier
                     .size(52.dp)
-                    .background(SoftGray, RoundedCornerShape(14.dp)),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SoftGray),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = product.name.firstOrNull()?.uppercaseChar()?.toString().orEmpty(),
-                    color = DeepGreen,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (productBitmap != null) {
+                    Image(
+                        bitmap = productBitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Text(
+                        text = product.name.firstOrNull()?.uppercaseChar()?.toString().orEmpty(),
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
 
             Column(

@@ -8,6 +8,7 @@ data class SettingsUiState(
     val logoUri: String? = null,
     val isSaving: Boolean = false,
     val isImporting: Boolean = false,
+    val isCleaningImages: Boolean = false,
     val isLoadingPrinters: Boolean = false,
     val isTestingPrinter: Boolean = false,
     val pairedPrinters: List<BluetoothPrinterDevice> = emptyList(),

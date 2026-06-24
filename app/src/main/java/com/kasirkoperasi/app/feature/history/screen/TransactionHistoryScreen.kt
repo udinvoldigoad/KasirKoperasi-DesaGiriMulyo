@@ -76,6 +76,8 @@ import com.kasirkoperasi.app.core.image.ProductImageStore
 import com.kasirkoperasi.app.core.navigation.AppRoute
 import com.kasirkoperasi.app.core.ui.KasirBottomBar
 import com.kasirkoperasi.app.core.ui.KoperasiLogo
+import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
+import com.kasirkoperasi.app.core.ui.dismissPanelOnTap
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import com.kasirkoperasi.app.feature.history.state.TransactionHistoryRange
@@ -291,11 +293,12 @@ private fun HistoryLoadingModal(
     title: String,
     caption: String,
 ) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
-        exit = fadeOut(animationSpec = tween(durationMillis = 120)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = {}) {
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 120)),
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -342,6 +345,7 @@ private fun HistoryLoadingModal(
                 }
             }
         }
+    }
     }
 }
 
@@ -698,15 +702,16 @@ private fun TransactionDetailOverlay(
     errorMessage: String?,
     onDismiss: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f)),
-    ) {
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .dismissPanelOnTap(onDismiss),
         )
 
         Surface(
@@ -769,6 +774,7 @@ private fun TransactionDetailOverlay(
                     }
                 }
             }
+        }
         }
     }
 }
