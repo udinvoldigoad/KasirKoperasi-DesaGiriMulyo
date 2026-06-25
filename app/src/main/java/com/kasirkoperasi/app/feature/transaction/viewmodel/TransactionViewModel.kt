@@ -33,35 +33,10 @@ class TransactionViewModel(
     }
 
     fun addProduct(product: Product) {
-        if (product.stockQuantity <= 0) {
-            _uiState.update { it.copy(errorMessage = "Stok ${product.name} kosong") }
-            return
-        }
-
-        val currentState = _uiState.value
-        val existingItem = currentState.cartItems.firstOrNull { it.product.id == product.id }
-        if (existingItem != null && existingItem.quantity >= product.stockQuantity) {
-            _uiState.update { it.copy(errorMessage = "Stok ${product.name} tidak cukup") }
-            return
-        }
-
-        val updatedCart = if (existingItem == null) {
-            currentState.cartItems + CartItem(product = product, quantity = 1)
-        } else {
-            currentState.cartItems.map {
-                if (it.product.id == product.id) {
-                    it.copy(quantity = it.quantity + 1)
-                } else {
-                    it
-                }
-            }
-        }
-
-        _uiState.update {
-            it.copy(
-                cartItems = updatedCart,
-                errorMessage = null,
-                successMessage = null,
+        _uiState.update { currentState ->
+            currentState.withProductAdded(
+                product = product,
+                quantityToAdd = 1,
             )
         }
     }
@@ -72,6 +47,9 @@ class TransactionViewModel(
             _uiState.update {
                 it.copy(
                     searchQuery = "",
+                    scannedProductConfirmation = null,
+                    scannedQuantityText = "1",
+                    scannedProductErrorMessage = null,
                     errorMessage = "Barcode tidak valid. Gunakan kode 4 angka.",
                     successMessage = null,
                 )
@@ -87,6 +65,9 @@ class TransactionViewModel(
             _uiState.update {
                 it.copy(
                     searchQuery = barcode,
+                    scannedProductConfirmation = null,
+                    scannedQuantityText = "1",
+                    scannedProductErrorMessage = null,
                     errorMessage = "Barang dengan barcode $barcode belum terdaftar",
                     successMessage = null,
                 )
@@ -94,9 +75,104 @@ class TransactionViewModel(
             return
         }
 
-        addProduct(matchedProduct)
         _uiState.update {
-            it.copy(searchQuery = "")
+            it.copy(
+                searchQuery = "",
+                scannedProductConfirmation = matchedProduct,
+                scannedQuantityText = "1",
+                scannedProductErrorMessage = null,
+                isConfirmingScannedProduct = false,
+                errorMessage = null,
+                successMessage = null,
+            )
+        }
+    }
+
+    fun updateScannedQuantity(value: String) {
+        _uiState.update {
+            it.copy(
+                scannedQuantityText = value.filter { char -> char.isDigit() },
+                scannedProductErrorMessage = null,
+                errorMessage = null,
+                successMessage = null,
+            )
+        }
+    }
+
+    fun dismissScannedProductConfirmation() {
+        _uiState.update {
+            it.copy(
+                scannedProductConfirmation = null,
+                scannedQuantityText = "1",
+                scannedProductErrorMessage = null,
+                isConfirmingScannedProduct = false,
+            )
+        }
+    }
+
+    fun confirmScannedProduct() {
+        val currentState = _uiState.value
+        val product = currentState.scannedProductConfirmation ?: return
+        val quantityToAdd = currentState.scannedQuantity
+        val currentCartQuantity = currentState.cartItems
+            .firstOrNull { it.product.id == product.id }
+            ?.quantity
+            ?: 0
+
+        if (quantityToAdd <= 0) {
+            _uiState.update {
+                it.copy(
+                    scannedProductErrorMessage = "Jumlah dibeli wajib lebih dari 0.",
+                    isConfirmingScannedProduct = false,
+                )
+            }
+            return
+        }
+
+        if (product.stockQuantity <= 0) {
+            _uiState.update {
+                it.copy(
+                    scannedProductErrorMessage = "Stok ${product.name} kosong. Tambah stok dari menu Barang terlebih dahulu.",
+                    isConfirmingScannedProduct = false,
+                )
+            }
+            return
+        }
+
+        if (currentCartQuantity + quantityToAdd > product.stockQuantity) {
+            _uiState.update {
+                it.copy(
+                    scannedProductErrorMessage = "Stok tidak cukup. Tersedia ${product.stockQuantity} ${product.unit}, di keranjang sudah $currentCartQuantity ${product.unit}.",
+                    isConfirmingScannedProduct = false,
+                )
+            }
+            return
+        }
+
+        _uiState.update { latestState ->
+            latestState
+                .copy(
+                    scannedProductConfirmation = null,
+                    scannedQuantityText = "1",
+                    scannedProductErrorMessage = null,
+                    isConfirmingScannedProduct = false,
+                )
+                .withProductAdded(
+                    product = product,
+                    quantityToAdd = quantityToAdd,
+                )
+        }
+    }
+
+    fun addProductQuantity(
+        product: Product,
+        quantityToAdd: Int,
+    ) {
+        _uiState.update { currentState ->
+            currentState.withProductAdded(
+                product = product,
+                quantityToAdd = quantityToAdd,
+            )
         }
     }
 
@@ -367,5 +443,52 @@ class TransactionViewModel(
         if (rawCode.length > 4) return null
 
         return rawCode.padStart(4, '0')
+    }
+
+    private fun TransactionUiState.withProductAdded(
+        product: Product,
+        quantityToAdd: Int,
+    ): TransactionUiState {
+        if (quantityToAdd <= 0) {
+            return copy(errorMessage = "Jumlah barang wajib lebih dari 0")
+        }
+        if (product.stockQuantity <= 0) {
+            return copy(errorMessage = "Stok ${product.name} kosong")
+        }
+
+        val cartWithFreshProduct = cartItems.map { item ->
+            if (item.product.id == product.id) {
+                item.copy(product = product)
+            } else {
+                item
+            }
+        }
+        val existingItem = cartWithFreshProduct.firstOrNull { it.product.id == product.id }
+        val currentQuantity = existingItem?.quantity ?: 0
+        if (currentQuantity + quantityToAdd > product.stockQuantity) {
+            return copy(
+                cartItems = cartWithFreshProduct,
+                errorMessage = "Stok ${product.name} tidak cukup",
+                successMessage = null,
+            )
+        }
+
+        val updatedCart = if (existingItem == null) {
+            cartWithFreshProduct + CartItem(product = product, quantity = quantityToAdd)
+        } else {
+            cartWithFreshProduct.map { item ->
+                if (item.product.id == product.id) {
+                    item.copy(quantity = item.quantity + quantityToAdd)
+                } else {
+                    item
+                }
+            }
+        }
+
+        return copy(
+            cartItems = updatedCart,
+            errorMessage = null,
+            successMessage = null,
+        )
     }
 }

@@ -124,6 +124,9 @@ fun TransactionScreen(
     onSearchChange: (String) -> Unit,
     onAddProduct: (Product) -> Unit,
     onBarcodeScanned: (String) -> Unit,
+    onScannedQuantityChange: (String) -> Unit,
+    onConfirmScannedProduct: () -> Unit,
+    onDismissScannedProductConfirmation: () -> Unit,
     onIncreaseQuantity: (Long) -> Unit,
     onDecreaseQuantity: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -279,6 +282,9 @@ fun TransactionScreen(
         isSuccessDialogVisible = false
         onClearMessage()
     }
+    BackHandler(enabled = uiState.scannedProductConfirmation != null) {
+        onDismissScannedProductConfirmation()
+    }
     BackHandler(enabled = activeSheet != null) {
         if (activeMoneyInputId != null) {
             activeMoneyInputId = null
@@ -394,6 +400,22 @@ fun TransactionScreen(
                                 .padding(end = 20.dp, bottom = 24.dp),
                         )
                     }
+                }
+            }
+
+            uiState.scannedProductConfirmation?.let { product ->
+                TransactionPanelOverlay(
+                    onDismiss = onDismissScannedProductConfirmation,
+                ) {
+                    ScannedProductConfirmationSheet(
+                        product = product,
+                        quantityText = uiState.scannedQuantityText,
+                        errorMessage = uiState.scannedProductErrorMessage,
+                        isSaving = uiState.isConfirmingScannedProduct,
+                        onQuantityChange = onScannedQuantityChange,
+                        onConfirm = onConfirmScannedProduct,
+                        onDismiss = onDismissScannedProductConfirmation,
+                    )
                 }
             }
 
@@ -905,6 +927,234 @@ private fun FloatingCartButton(
                     textAlign = TextAlign.Center,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ScannedProductConfirmationSheet(
+    product: Product,
+    quantityText: String,
+    errorMessage: String?,
+    isSaving: Boolean,
+    onQuantityChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PanelHandle(onDismiss = onDismiss)
+
+        Text(
+            text = "Konfirmasi Barang",
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "Pastikan hasil scan sudah sesuai, lalu isi jumlah barang yang dibeli.",
+            color = MutedText,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 4.dp),
+        ) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, LineSoft),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ProductInitial(
+                                name = product.name,
+                                imageUri = product.imageUri,
+                            )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = product.name,
+                                    color = Color(0xFF17221B),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = product.category,
+                                    color = MutedText,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                Text(
+                                    text = "Barcode ${product.barcode.orEmpty().ifBlank { "-" }}",
+                                    color = MutedText,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            ScanInfoPill(
+                                title = "Stok Saat Ini",
+                                value = "${product.stockQuantity} ${product.unit}",
+                                modifier = Modifier.weight(1f),
+                                isWarning = product.stockQuantity <= 0,
+                            )
+                            ScanInfoPill(
+                                title = "Harga Jual",
+                                value = product.sellingPrice.toRupiah(),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, LineSoft),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = "Jumlah Dibeli",
+                            color = Color(0xFF17221B),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Isi jumlah barang yang akan dibeli. Jumlah ini langsung masuk ke keranjang.",
+                            color = MutedText,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedTextField(
+                            value = quantityText,
+                            onValueChange = onQuantityChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Jumlah dibeli") },
+                            placeholder = { Text("Contoh: 3") },
+                            suffix = { Text(product.unit) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = paymentTextFieldColors(),
+                        )
+                    }
+                }
+            }
+
+            errorMessage?.let { message ->
+                item {
+                    MessageCard(
+                        message = message,
+                        isError = true,
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(
+                    text = "Batal",
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Button(
+                onClick = onConfirm,
+                enabled = !isSaving,
+                modifier = Modifier.weight(1f).height(52.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = DeepGreen,
+                    contentColor = Color.White,
+                ),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(
+                    text = if (isSaving) "Memproses..." else "Tambah ke Keranjang",
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanInfoPill(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    isWarning: Boolean = false,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isWarning) MaterialTheme.colorScheme.errorContainer else FreshMint,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                color = if (isWarning) MaterialTheme.colorScheme.onErrorContainer else MutedText,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
+                color = if (isWarning) MaterialTheme.colorScheme.onErrorContainer else DeepGreen,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

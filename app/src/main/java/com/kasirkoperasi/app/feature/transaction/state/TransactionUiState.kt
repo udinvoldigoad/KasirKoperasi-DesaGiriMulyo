@@ -19,6 +19,10 @@ data class TransactionUiState(
     val completedPaidAmount: Long = 0L,
     val completedChangeAmount: Long = 0L,
     val completedDebtAmount: Long = 0L,
+    val scannedProductConfirmation: Product? = null,
+    val scannedQuantityText: String = "1",
+    val scannedProductErrorMessage: String? = null,
+    val isConfirmingScannedProduct: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
 ) {
@@ -36,6 +40,9 @@ data class TransactionUiState(
 
     val debtAmount: Long
         get() = (totalAmount - paidAmount).coerceAtLeast(0L)
+
+    val scannedQuantity: Int
+        get() = scannedQuantityText.filter { it.isDigit() }.toIntOrNull() ?: 0
 }
 
 data class CartItem(

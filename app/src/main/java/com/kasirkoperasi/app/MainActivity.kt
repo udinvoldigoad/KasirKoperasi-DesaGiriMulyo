@@ -264,6 +264,9 @@ class MainActivity : ComponentActivity() {
                                     products = productUiState.products,
                                 )
                             },
+                            onScannedQuantityChange = transactionViewModel::updateScannedQuantity,
+                            onConfirmScannedProduct = transactionViewModel::confirmScannedProduct,
+                            onDismissScannedProductConfirmation = transactionViewModel::dismissScannedProductConfirmation,
                             onIncreaseQuantity = transactionViewModel::increaseQuantity,
                             onDecreaseQuantity = transactionViewModel::decreaseQuantity,
                             onRemoveItem = transactionViewModel::removeItem,
