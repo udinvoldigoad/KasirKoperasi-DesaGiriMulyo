@@ -8,9 +8,11 @@ import com.kasirkoperasi.app.domain.model.SalesTransaction
 class ExportTransactionReportPdfUseCase(
     private val getSalesTransactionItemsUseCase: GetSalesTransactionItemsUseCase,
     private val getProductsUseCase: GetProductsUseCase,
+    private val getProductsIncludingInactiveUseCase: GetProductsIncludingInactiveUseCase,
     private val getDebtPaymentsUseCase: GetDebtPaymentsUseCase,
     private val getDebtCustomersUseCase: GetDebtCustomersUseCase,
     private val getStockMovementsUseCase: GetStockMovementsUseCase,
+    private val getExpensesUseCase: GetExpensesUseCase,
     private val transactionReportPdfExporter: TransactionReportPdfExporter,
 ) {
     suspend operator fun invoke(
@@ -23,6 +25,7 @@ class ExportTransactionReportPdfUseCase(
             transaction.id to getSalesTransactionItemsUseCase(transaction.id)
         }
         val products = getProductsUseCase()
+        val productsIncludingInactive = getProductsIncludingInactiveUseCase()
         val debtPayments = getDebtPaymentsUseCase(
             startDateMillis = startDateMillis,
             endDateMillis = endDateMillis,
@@ -32,12 +35,17 @@ class ExportTransactionReportPdfUseCase(
             startDateMillis = startDateMillis,
             endDateMillis = endDateMillis,
         )
+        val expenses = getExpensesUseCase(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+        )
 
         require(
             transactions.isNotEmpty() ||
                 products.isNotEmpty() ||
                 debtPayments.isNotEmpty() ||
-                stockMovements.isNotEmpty(),
+                stockMovements.isNotEmpty() ||
+                expenses.isNotEmpty(),
         ) {
             "Tidak ada data untuk diexport"
         }
@@ -48,9 +56,11 @@ class ExportTransactionReportPdfUseCase(
                 transactions = transactions,
                 itemsByTransactionId = itemsByTransactionId,
                 stockProducts = products,
+                productNamesById = productsIncludingInactive.associate { it.id to it.name },
                 debtPayments = debtPayments,
                 debtCustomers = debtCustomers,
                 stockMovements = stockMovements,
+                expenses = expenses,
             ),
         )
     }

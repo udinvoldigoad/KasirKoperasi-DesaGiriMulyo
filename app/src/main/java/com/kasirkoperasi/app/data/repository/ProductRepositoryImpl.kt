@@ -21,6 +21,10 @@ class ProductRepositoryImpl(
         return productDao.getAllProducts().map { it.toDomain() }
     }
 
+    override suspend fun getProductsIncludingInactive(): List<Product> {
+        return productDao.getAllProductsIncludingInactive().map { it.toDomain() }
+    }
+
     override suspend fun getProductByBarcode(barcode: String): Product? {
         return productDao.getProductByBarcode(barcode)?.toDomain()
     }

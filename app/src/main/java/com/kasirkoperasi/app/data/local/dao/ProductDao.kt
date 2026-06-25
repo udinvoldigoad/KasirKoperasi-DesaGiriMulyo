@@ -11,6 +11,9 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE is_active = 1 ORDER BY name ASC")
     suspend fun getAllProducts(): List<ProductEntity>
 
+    @Query("SELECT * FROM products ORDER BY name ASC")
+    suspend fun getAllProductsIncludingInactive(): List<ProductEntity>
+
     @Query("SELECT * FROM products WHERE barcode = :barcode AND is_active = 1 LIMIT 1")
     suspend fun getProductByBarcode(barcode: String): ProductEntity?
 

@@ -11,6 +11,7 @@ import androidx.core.content.FileProvider
 import com.kasirkoperasi.app.core.settings.StoreProfileStore
 import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
 import com.kasirkoperasi.app.domain.model.DebtPayment
+import com.kasirkoperasi.app.domain.model.Expense
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
@@ -27,9 +28,11 @@ data class TransactionReportPdfData(
     val transactions: List<SalesTransaction>,
     val itemsByTransactionId: Map<Long, List<SalesTransactionItem>>,
     val stockProducts: List<Product>,
+    val productNamesById: Map<Long, String>,
     val debtPayments: List<DebtPayment>,
     val debtCustomers: List<DebtCustomerSummary>,
     val stockMovements: List<StockMovement>,
+    val expenses: List<Expense>,
     val exportedAtMillis: Long = System.currentTimeMillis(),
 )
 
@@ -39,9 +42,10 @@ class TransactionReportPdfExporter(
     fun export(data: TransactionReportPdfData): Uri {
         require(
             data.transactions.isNotEmpty() ||
-                data.stockProducts.isNotEmpty() ||
+            data.stockProducts.isNotEmpty() ||
                 data.debtPayments.isNotEmpty() ||
-                data.stockMovements.isNotEmpty(),
+                data.stockMovements.isNotEmpty() ||
+                data.expenses.isNotEmpty(),
         ) {
             "Tidak ada data untuk diexport"
         }
@@ -128,9 +132,10 @@ private class PdfRenderer(
         drawDebtTransactionSection(data.transactions.filter { it.debtAmount > 0L })
         drawDebtPaymentSection(data.debtPayments)
         drawDebtCustomerSection(data.debtCustomers)
+        drawExpenseSection(data.expenses)
         drawStockMovementSection(
             stockMovements = data.stockMovements,
-            productNameById = data.stockProducts.associate { it.id to it.name },
+            productNameById = data.productNamesById,
         )
         drawStockSection(data.stockProducts)
 
@@ -183,6 +188,8 @@ private class PdfRenderer(
             .sumOf { it.amount }
         val totalDebt = data.transactions.sumOf { it.debtAmount }
         val totalDebtPayment = data.debtPayments.sumOf { it.amount }
+        val totalExpense = data.expenses.sumOf { it.amount }
+        val netProfit = totalProfit - totalExpense
 
         drawSummaryBox(
             x = MARGIN_LEFT,
@@ -223,7 +230,21 @@ private class PdfRenderer(
             value = "${totalDebt.toRupiah()} / ${totalDebtPayment.toRupiah()}",
             yOffset = 50f,
         )
-        y += 104f
+        drawSummaryBox(
+            x = MARGIN_LEFT,
+            width = SUMMARY_BOX_WIDTH,
+            title = "Total Pengeluaran",
+            value = totalExpense.toRupiah(),
+            yOffset = 100f,
+        )
+        drawSummaryBox(
+            x = MARGIN_LEFT + SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP,
+            width = SUMMARY_BOX_WIDTH,
+            title = "Profit Bersih",
+            value = netProfit.toRupiah(),
+            yOffset = 100f,
+        )
+        y += 154f
     }
 
     private fun drawSummaryBox(
@@ -352,6 +373,26 @@ private class PdfRenderer(
         y += 18f
     }
 
+    private fun drawExpenseSection(expenses: List<Expense>) {
+        drawSectionTitle("Daftar Pengeluaran")
+        drawExpenseTableHeader()
+
+        if (expenses.isEmpty()) {
+            drawEmptyTableMessage("Belum ada pengeluaran pada periode ini.")
+            y += 10f
+            return
+        }
+
+        expenses.forEachIndexed { index, expense ->
+            drawExpenseRow(
+                rowNumber = index + 1,
+                expense = expense,
+            )
+        }
+
+        y += 18f
+    }
+
     private fun drawStockMovementSection(
         stockMovements: List<StockMovement>,
         productNameById: Map<Long, String>,
@@ -436,6 +477,10 @@ private class PdfRenderer(
 
     private fun drawStockMovementTableHeader() {
         drawHeaderRow(STOCK_MOVEMENT_TABLE_COLUMNS)
+    }
+
+    private fun drawExpenseTableHeader() {
+        drawHeaderRow(EXPENSE_TABLE_COLUMNS)
     }
 
     private fun drawHeaderRow(columns: List<TableColumn>) {
@@ -674,6 +719,31 @@ private class PdfRenderer(
         )
     }
 
+    private fun drawExpenseRow(
+        rowNumber: Int,
+        expense: Expense,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawExpenseTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            expense.createdAtMillis.toShortDateTime(),
+            expense.title,
+            expense.note.ifBlank { "-" },
+            expense.amount.toRupiah(),
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = EXPENSE_TABLE_COLUMNS,
+            boldIndexes = setOf(4),
+            multilineIndexes = setOf(2, 3),
+        )
+    }
+
     private fun drawGenericRow(
         rowNumber: Int,
         values: List<String>,
@@ -849,6 +919,14 @@ private class PdfRenderer(
             TableColumn("Qty", 72f),
             TableColumn("Stok Akhir", 92f),
             TableColumn("Catatan", 156f),
+        )
+
+        val EXPENSE_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 110f),
+            TableColumn("Pengeluaran", 260f),
+            TableColumn("Catatan", 264f),
+            TableColumn("Nominal", 120f),
         )
     }
 }

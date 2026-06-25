@@ -143,7 +143,7 @@ class OfflineBackupExporter(
             Dibuat: $timestamp
 
             Isi backup:
-            - databases/${DatabaseConfig.DATABASE_NAME}: data produk, stok, transaksi, hutang, laporan
+            - databases/${DatabaseConfig.DATABASE_NAME}: data produk, stok, transaksi, hutang, pengeluaran, laporan
             - files/$PRODUCT_IMAGE_DIRECTORY: foto produk
             - files/$STORE_PROFILE_DIRECTORY: logo koperasi
             - $SHARED_PREFS_DIRECTORY: nama toko dan pilihan printer

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FilterList
@@ -935,10 +936,10 @@ private fun MenuGrid(
                 modifier = Modifier.weight(1f),
             )
             MenuCard(
-                title = "Transaksi",
-                icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                title = "Pengeluaran",
+                icon = Icons.Outlined.AttachMoney,
                 accentColor = Color(0xFFB45309),
-                onClick = { onRouteSelected(AppRoute.Transaction.route) },
+                onClick = { onRouteSelected(AppRoute.Expense.route) },
                 modifier = Modifier.weight(1f),
             )
         }

@@ -27,6 +27,9 @@ import com.kasirkoperasi.app.di.AppContainer
 import com.kasirkoperasi.app.feature.history.screen.TransactionHistoryScreen
 import com.kasirkoperasi.app.feature.history.viewmodel.TransactionHistoryViewModel
 import com.kasirkoperasi.app.feature.history.viewmodel.TransactionHistoryViewModelFactory
+import com.kasirkoperasi.app.feature.expense.screen.ExpenseScreen
+import com.kasirkoperasi.app.feature.expense.viewmodel.ExpenseViewModel
+import com.kasirkoperasi.app.feature.expense.viewmodel.ExpenseViewModelFactory
 import com.kasirkoperasi.app.feature.home.screen.HomeScreen
 import com.kasirkoperasi.app.feature.product.screen.ProductScreen
 import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModel
@@ -76,6 +79,13 @@ class MainActivity : ComponentActivity() {
             getDebtCustomerDetailUseCase = appContainer.getDebtCustomerDetailUseCase,
             getDebtCustomersUseCase = appContainer.getDebtCustomersUseCase,
             recordDebtPaymentUseCase = appContainer.recordDebtPaymentUseCase,
+        )
+    }
+
+    private val expenseViewModel: ExpenseViewModel by viewModels {
+        ExpenseViewModelFactory(
+            saveExpenseUseCase = appContainer.saveExpenseUseCase,
+            getExpensesUseCase = appContainer.getExpensesUseCase,
         )
     }
 
@@ -309,6 +319,26 @@ class MainActivity : ComponentActivity() {
                             onRecordDebtPayment = reportViewModel::recordDebtPayment,
                             onDebtCustomerSelected = reportViewModel::openDebtCustomerDetail,
                             onDismissDebtCustomerDetail = reportViewModel::dismissDebtCustomerDetail,
+                            storeLogoUri = settingsUiState.logoUri,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    AppRoute.Expense.route -> {
+                        val expenseUiState by expenseViewModel.uiState.collectAsState()
+
+                        ExpenseScreen(
+                            uiState = expenseUiState,
+                            selectedRoute = selectedRoute,
+                            onRouteSelected = navigateTo,
+                            onTitleChange = expenseViewModel::updateTitle,
+                            onAmountChange = expenseViewModel::updateAmount,
+                            onNoteChange = expenseViewModel::updateNote,
+                            onSaveExpense = expenseViewModel::saveExpense,
+                            onClearMessage = expenseViewModel::clearMessage,
+                            onExpenseSaved = {
+                                reportViewModel.loadTodaySummary()
+                            },
                             storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
                         )

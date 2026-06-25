@@ -12,6 +12,8 @@ import com.kasirkoperasi.app.data.local.dao.SalesTransactionDao
 import com.kasirkoperasi.app.data.local.dao.StockDao
 import com.kasirkoperasi.app.data.local.dao.DebtPaymentDao
 import com.kasirkoperasi.app.data.local.entity.DebtPaymentEntity
+import com.kasirkoperasi.app.data.local.dao.ExpenseDao
+import com.kasirkoperasi.app.data.local.entity.ExpenseEntity
 import com.kasirkoperasi.app.data.local.entity.ProductEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionItemEntity
@@ -24,6 +26,7 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
         SalesTransactionEntity::class,
         SalesTransactionItemEntity::class,
         DebtPaymentEntity::class,
+        ExpenseEntity::class,
     ],
     version = DatabaseConfig.DATABASE_VERSION,
     exportSchema = false,
@@ -38,6 +41,8 @@ abstract class KasirDatabase : RoomDatabase() {
     abstract fun salesTransactionDao(): SalesTransactionDao
 
     abstract fun debtPaymentDao(): DebtPaymentDao
+
+    abstract fun expenseDao(): ExpenseDao
 
     companion object {
         @Volatile
@@ -59,6 +64,7 @@ abstract class KasirDatabase : RoomDatabase() {
                         MIGRATION_6_7,
                         MIGRATION_7_8,
                         MIGRATION_8_9,
+                        MIGRATION_9_10,
                     )
                     .build()
                     .also { instance = it }
@@ -241,6 +247,28 @@ abstract class KasirDatabase : RoomDatabase() {
                     """
                     CREATE INDEX IF NOT EXISTS `index_debt_payments_buyer_name_buyer_contact`
                     ON `debt_payments` (`buyer_name`, `buyer_contact`)
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `expenses` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `amount` INTEGER NOT NULL,
+                        `note` TEXT NOT NULL DEFAULT '',
+                        `created_at_millis` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_expenses_created_at_millis`
+                    ON `expenses` (`created_at_millis`)
                     """.trimIndent(),
                 )
             }
