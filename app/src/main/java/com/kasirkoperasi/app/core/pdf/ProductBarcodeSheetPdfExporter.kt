@@ -81,17 +81,17 @@ private class ProductBarcodeSheetRenderer(
     }
     private val productNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(23, 34, 27)
-        textSize = 10f
+        textSize = 7.8f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val smallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(105, 115, 109)
-        textSize = 8.2f
+        textSize = 6.8f
     }
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(216, 222, 216)
         style = Paint.Style.STROKE
-        strokeWidth = 1.1f
+        strokeWidth = 0.9f
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -125,7 +125,7 @@ private class ProductBarcodeSheetRenderer(
     private fun drawHeader(totalLabels: Int) {
         canvas.drawText("Barcode Produk - $storeName", MARGIN, 30f, titlePaint)
         canvas.drawText(
-            "Total $totalLabels label. Cetak ukuran A4, lalu tempel barcode pada rak barang.",
+            "Total $totalLabels label kecil. Cetak ukuran A4, lalu tempel barcode pada rak barang.",
             MARGIN,
             47f,
             subtitlePaint,
@@ -150,21 +150,21 @@ private class ProductBarcodeSheetRenderer(
 
     private fun drawLabel(label: ProductBarcodeLabel, left: Float, top: Float) {
         val rect = RectF(left, top, left + LABEL_WIDTH, top + LABEL_HEIGHT)
-        canvas.drawRoundRect(rect, 9f, 9f, fillPaint)
-        canvas.drawRoundRect(rect, 9f, 9f, borderPaint)
+        canvas.drawRoundRect(rect, 7f, 7f, fillPaint)
+        canvas.drawRoundRect(rect, 7f, 7f, borderPaint)
 
-        drawCenteredLine(label.product.name, left + 8f, top + 17f, left + LABEL_WIDTH - 8f, productNamePaint)
+        drawCenteredLine(label.product.name, left + 6f, top + 13f, left + LABEL_WIDTH - 6f, productNamePaint)
 
         val barcodeBitmap = Code128BarcodeGenerator.generate(
             value = label.barcode,
-            moduleWidth = 6,
-            barcodeHeight = 150,
-            textHeight = 52,
+            moduleWidth = 5,
+            barcodeHeight = 122,
+            textHeight = 0,
         )
-        val barcodeRect = RectF(left + 10f, top + 27f, left + LABEL_WIDTH - 10f, top + 88f)
+        val barcodeRect = RectF(left + 6f, top + 21f, left + LABEL_WIDTH - 6f, top + 53f)
         canvas.drawBitmap(barcodeBitmap, null, barcodeRect, null)
 
-        drawCenteredLine(label.product.category, left + 8f, top + 105f, left + LABEL_WIDTH - 8f, smallPaint)
+        drawCenteredLine(label.product.category, left + 6f, top + 65f, left + LABEL_WIDTH - 6f, smallPaint)
     }
 
     private fun drawCenteredLine(text: String, left: Float, baseline: Float, right: Float, paint: Paint) {
@@ -185,13 +185,13 @@ private class ProductBarcodeSheetRenderer(
     private companion object {
         const val PAGE_WIDTH = 595
         const val PAGE_HEIGHT = 842
-        const val MARGIN = 28f
-        const val GUTTER = 9f
-        const val COLUMNS = 3
-        const val ROWS = 6
+        const val MARGIN = 20f
+        const val GUTTER = 5f
+        const val COLUMNS = 5
+        const val ROWS = 10
         const val LABELS_PER_PAGE = COLUMNS * ROWS
-        const val FIRST_LABEL_TOP = 66f
+        const val FIRST_LABEL_TOP = 58f
         const val LABEL_WIDTH = (PAGE_WIDTH - MARGIN * 2 - GUTTER * (COLUMNS - 1)) / COLUMNS
-        const val LABEL_HEIGHT = 116f
+        const val LABEL_HEIGHT = 72f
     }
 }
