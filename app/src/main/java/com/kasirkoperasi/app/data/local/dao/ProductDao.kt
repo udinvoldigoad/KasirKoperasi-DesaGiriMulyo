@@ -17,6 +17,9 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE barcode = :barcode AND is_active = 1 LIMIT 1")
     suspend fun getProductByBarcode(barcode: String): ProductEntity?
 
+    @Query("SELECT * FROM products WHERE barcode = :barcode LIMIT 1")
+    suspend fun getProductByBarcodeIncludingInactive(barcode: String): ProductEntity?
+
     @Query("SELECT * FROM products WHERE id = :productId AND is_active = 1 LIMIT 1")
     suspend fun getProductById(productId: Long): ProductEntity?
 
@@ -44,6 +47,29 @@ interface ProductDao {
         sellingPrice: Long,
         stockQuantity: Int,
         imageUri: String?,
+        updatedAtMillis: Long = System.currentTimeMillis(),
+    )
+
+    @Query(
+        """
+        UPDATE products
+        SET name = :name,
+            category = :category,
+            unit = :unit,
+            purchase_price = :purchasePrice,
+            selling_price = :sellingPrice,
+            is_active = 1,
+            updated_at_millis = :updatedAtMillis
+        WHERE id = :productId
+        """,
+    )
+    suspend fun updateProductMasterFromImport(
+        productId: Long,
+        name: String,
+        category: String,
+        unit: String,
+        purchasePrice: Long,
+        sellingPrice: Long,
         updatedAtMillis: Long = System.currentTimeMillis(),
     )
 

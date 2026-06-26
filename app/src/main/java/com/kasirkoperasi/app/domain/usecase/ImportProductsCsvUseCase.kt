@@ -6,15 +6,24 @@ import com.kasirkoperasi.app.domain.repository.ProductRepository
 
 data class ProductCsvImportResult(
     val totalRows: Int,
-    val importedCount: Int,
+    val addedCount: Int,
+    val updatedCount: Int,
     val skippedCount: Int,
     val issues: List<ProductCsvImportIssue>,
-)
+) {
+    val importedCount: Int
+        get() = addedCount + updatedCount
+}
 
 data class ProductCsvImportIssue(
     val rowNumber: Int,
     val reason: String,
 )
+
+private enum class ImportAction {
+    ADDED,
+    UPDATED,
+}
 
 class ImportProductsCsvUseCase(
     private val productRepository: ProductRepository,
@@ -29,7 +38,8 @@ class ImportProductsCsvUseCase(
         val indexes = resolveColumnIndexes(header)
         val issues = mutableListOf<ProductCsvImportIssue>()
         val seenBarcodes = mutableSetOf<String>()
-        var importedCount = 0
+        var addedCount = 0
+        var updatedCount = 0
         var totalRows = 0
 
         rows.drop(1).forEachIndexed { index, row ->
@@ -59,7 +69,6 @@ class ImportProductsCsvUseCase(
                     purchasePrice == null -> "harga_beli tidak valid"
                     sellingPrice == null || sellingPrice <= 0L -> "harga_jual wajib lebih dari 0"
                     stockQuantity == null -> "stok tidak valid"
-                    productRepository.getProductByBarcode(barcode) != null -> "kode $barcode sudah ada di database"
                     else -> null
                 }
             }
@@ -73,19 +82,35 @@ class ImportProductsCsvUseCase(
             }
 
             runCatching {
-                productRepository.saveProduct(
-                    Product(
-                        name = name,
-                        category = requireNotNull(category),
-                        barcode = requireNotNull(barcode),
-                        unit = unit,
-                        purchasePrice = requireNotNull(purchasePrice),
-                        sellingPrice = requireNotNull(sellingPrice),
-                        stockQuantity = requireNotNull(stockQuantity),
-                    ),
+                val productFromCsv = Product(
+                    name = name,
+                    category = requireNotNull(category),
+                    barcode = requireNotNull(barcode),
+                    unit = unit,
+                    purchasePrice = requireNotNull(purchasePrice),
+                    sellingPrice = requireNotNull(sellingPrice),
+                    stockQuantity = requireNotNull(stockQuantity),
                 )
+                val existingProduct = productRepository.getProductByBarcodeIncludingInactive(barcode)
+
+                if (existingProduct == null) {
+                    productRepository.saveProduct(productFromCsv)
+                    ImportAction.ADDED
+                } else {
+                    productRepository.updateProductMasterFromImport(
+                        productFromCsv.copy(
+                            id = existingProduct.id,
+                            stockQuantity = existingProduct.stockQuantity,
+                            imageUri = existingProduct.imageUri,
+                        ),
+                    )
+                    ImportAction.UPDATED
+                }
             }.onSuccess {
-                importedCount += 1
+                when (it) {
+                    ImportAction.ADDED -> addedCount += 1
+                    ImportAction.UPDATED -> updatedCount += 1
+                }
             }.onFailure { throwable ->
                 issues += ProductCsvImportIssue(
                     rowNumber = rowNumber,
@@ -96,7 +121,8 @@ class ImportProductsCsvUseCase(
 
         return ProductCsvImportResult(
             totalRows = totalRows,
-            importedCount = importedCount,
+            addedCount = addedCount,
+            updatedCount = updatedCount,
             skippedCount = issues.size,
             issues = issues,
         )
@@ -208,6 +234,11 @@ private object CsvParser {
         val semicolonCount = firstLine.count { it == ';' }
 
         return if (semicolonCount > commaCount) ';' else ','
+    }
+
+    private enum class ImportAction {
+        ADDED,
+        UPDATED,
     }
 }
 

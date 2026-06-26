@@ -406,7 +406,12 @@ class SettingsViewModel(
     }
 
     private fun ProductCsvImportResult.toMessage(): String {
-        val baseMessage = "Import selesai: $importedCount dari $totalRows produk ditambahkan"
+        val actionParts = buildList {
+            if (addedCount > 0) add("$addedCount ditambahkan")
+            if (updatedCount > 0) add("$updatedCount diperbarui")
+        }.joinToString(", ")
+            .ifBlank { "0 diproses" }
+        val baseMessage = "Import selesai: $importedCount dari $totalRows produk diproses ($actionParts)"
         if (skippedCount == 0) return baseMessage
 
         val firstIssues = issues

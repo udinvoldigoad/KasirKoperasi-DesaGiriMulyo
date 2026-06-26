@@ -29,9 +29,25 @@ class ProductRepositoryImpl(
         return productDao.getProductByBarcode(barcode)?.toDomain()
     }
 
+    override suspend fun getProductByBarcodeIncludingInactive(barcode: String): Product? {
+        return productDao.getProductByBarcodeIncludingInactive(barcode)?.toDomain()
+    }
+
     override suspend fun saveProduct(product: Product): Long {
         return productDao.insertProduct(
             product.copy(category = ProductCategory.normalize(product.category)).toEntity(),
+        )
+    }
+
+    override suspend fun updateProductMasterFromImport(product: Product) {
+        require(product.id > 0L) { "Produk tidak valid" }
+        productDao.updateProductMasterFromImport(
+            productId = product.id,
+            name = product.name,
+            category = ProductCategory.normalize(product.category),
+            unit = product.unit,
+            purchasePrice = product.purchasePrice,
+            sellingPrice = product.sellingPrice,
         )
     }
 
