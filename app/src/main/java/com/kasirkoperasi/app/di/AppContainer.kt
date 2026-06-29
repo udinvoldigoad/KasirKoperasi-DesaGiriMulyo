@@ -25,12 +25,16 @@ import com.kasirkoperasi.app.domain.usecase.GetDebtTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetExpensesUseCase
 import com.kasirkoperasi.app.domain.usecase.GetProductsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetProductsIncludingInactiveUseCase
+import com.kasirkoperasi.app.domain.usecase.GetReturnedQuantityUseCase
+import com.kasirkoperasi.app.domain.usecase.GetSalesReturnSummariesUseCase
+import com.kasirkoperasi.app.domain.usecase.GetSalesReturnsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionItemsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSalesTransactionsUseCase
 import com.kasirkoperasi.app.domain.usecase.GetSimpleReportUseCase
 import com.kasirkoperasi.app.domain.usecase.GetStockMovementsUseCase
 import com.kasirkoperasi.app.domain.usecase.ImportProductsCsvUseCase
 import com.kasirkoperasi.app.domain.usecase.RecordDebtPaymentUseCase
+import com.kasirkoperasi.app.domain.usecase.ReturnSalesTransactionItemUseCase
 import com.kasirkoperasi.app.domain.usecase.SaveProductUseCase
 import com.kasirkoperasi.app.domain.usecase.SaveExpenseUseCase
 import com.kasirkoperasi.app.domain.usecase.UpdateProductWithStockInUseCase
@@ -47,6 +51,7 @@ class AppContainer(context: Context) {
 
     private val salesTransactionRepository: SalesTransactionRepository = SalesTransactionRepositoryImpl(
         salesTransactionDao = database.salesTransactionDao(),
+        salesReturnDao = database.salesReturnDao(),
         productDao = database.productDao(),
         stockDao = database.stockDao(),
         database = database,
@@ -55,6 +60,7 @@ class AppContainer(context: Context) {
     private val debtRepository: DebtRepository = DebtRepositoryImpl(
         debtPaymentDao = database.debtPaymentDao(),
         salesTransactionDao = database.salesTransactionDao(),
+        salesReturnDao = database.salesReturnDao(),
     )
 
     private val stockRepository: StockRepository = StockRepositoryImpl(
@@ -66,7 +72,10 @@ class AppContainer(context: Context) {
     )
 
     private val reportRepository: ReportRepository = ReportRepositoryImpl(
-        reportDao = database.reportDao(),
+        salesTransactionDao = database.salesTransactionDao(),
+        salesReturnDao = database.salesReturnDao(),
+        debtPaymentDao = database.debtPaymentDao(),
+        productDao = database.productDao(),
     )
 
     val getProductsUseCase = GetProductsUseCase(productRepository)
@@ -80,6 +89,10 @@ class AppContainer(context: Context) {
     val completeSalesTransactionUseCase = CompleteSalesTransactionUseCase(salesTransactionRepository)
     val getSalesTransactionItemsUseCase = GetSalesTransactionItemsUseCase(salesTransactionRepository)
     val getSalesTransactionsUseCase = GetSalesTransactionsUseCase(salesTransactionRepository)
+    val getReturnedQuantityUseCase = GetReturnedQuantityUseCase(salesTransactionRepository)
+    val getSalesReturnSummariesUseCase = GetSalesReturnSummariesUseCase(salesTransactionRepository)
+    val getSalesReturnsUseCase = GetSalesReturnsUseCase(salesTransactionRepository)
+    val returnSalesTransactionItemUseCase = ReturnSalesTransactionItemUseCase(salesTransactionRepository)
     val getDebtTransactionsUseCase = GetDebtTransactionsUseCase(salesTransactionRepository)
     val getDebtCustomerDetailUseCase = GetDebtCustomerDetailUseCase(debtRepository)
     val getDebtCustomersUseCase = GetDebtCustomersUseCase(debtRepository)
@@ -88,6 +101,8 @@ class AppContainer(context: Context) {
     val getStockMovementsUseCase = GetStockMovementsUseCase(stockRepository)
     val exportTransactionReportPdfUseCase = ExportTransactionReportPdfUseCase(
         getSalesTransactionItemsUseCase = getSalesTransactionItemsUseCase,
+        getSalesReturnSummariesUseCase = getSalesReturnSummariesUseCase,
+        getSalesReturnsUseCase = getSalesReturnsUseCase,
         getProductsUseCase = getProductsUseCase,
         getProductsIncludingInactiveUseCase = getProductsIncludingInactiveUseCase,
         getDebtPaymentsUseCase = getDebtPaymentsUseCase,

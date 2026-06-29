@@ -7,6 +7,8 @@ import com.kasirkoperasi.app.domain.model.SalesTransaction
 
 class ExportTransactionReportPdfUseCase(
     private val getSalesTransactionItemsUseCase: GetSalesTransactionItemsUseCase,
+    private val getSalesReturnSummariesUseCase: GetSalesReturnSummariesUseCase,
+    private val getSalesReturnsUseCase: GetSalesReturnsUseCase,
     private val getProductsUseCase: GetProductsUseCase,
     private val getProductsIncludingInactiveUseCase: GetProductsIncludingInactiveUseCase,
     private val getDebtPaymentsUseCase: GetDebtPaymentsUseCase,
@@ -24,6 +26,12 @@ class ExportTransactionReportPdfUseCase(
         val itemsByTransactionId = transactions.associate { transaction ->
             transaction.id to getSalesTransactionItemsUseCase(transaction.id)
         }
+        val transactionItemIds = itemsByTransactionId.values.flatten().map { it.id }
+        val returnSummariesByItemId = getSalesReturnSummariesUseCase(transactionItemIds)
+        val returns = getSalesReturnsUseCase(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+        )
         val products = getProductsUseCase()
         val productsIncludingInactive = getProductsIncludingInactiveUseCase()
         val debtPayments = getDebtPaymentsUseCase(
@@ -42,6 +50,7 @@ class ExportTransactionReportPdfUseCase(
 
         require(
             transactions.isNotEmpty() ||
+                returns.isNotEmpty() ||
                 products.isNotEmpty() ||
                 debtPayments.isNotEmpty() ||
                 stockMovements.isNotEmpty() ||
@@ -55,6 +64,8 @@ class ExportTransactionReportPdfUseCase(
                 periodLabel = periodLabel,
                 transactions = transactions,
                 itemsByTransactionId = itemsByTransactionId,
+                returnSummariesByItemId = returnSummariesByItemId,
+                returns = returns,
                 stockProducts = products,
                 productNamesById = productsIncludingInactive.associate { it.id to it.name },
                 debtPayments = debtPayments,

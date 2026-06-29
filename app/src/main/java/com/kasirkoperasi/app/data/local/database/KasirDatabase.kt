@@ -8,6 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.kasirkoperasi.app.data.local.dao.ProductDao
 import com.kasirkoperasi.app.data.local.dao.ReportDao
+import com.kasirkoperasi.app.data.local.dao.SalesReturnDao
 import com.kasirkoperasi.app.data.local.dao.SalesTransactionDao
 import com.kasirkoperasi.app.data.local.dao.StockDao
 import com.kasirkoperasi.app.data.local.dao.DebtPaymentDao
@@ -15,6 +16,7 @@ import com.kasirkoperasi.app.data.local.entity.DebtPaymentEntity
 import com.kasirkoperasi.app.data.local.dao.ExpenseDao
 import com.kasirkoperasi.app.data.local.entity.ExpenseEntity
 import com.kasirkoperasi.app.data.local.entity.ProductEntity
+import com.kasirkoperasi.app.data.local.entity.SalesReturnEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionItemEntity
 import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
@@ -27,6 +29,7 @@ import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
         SalesTransactionItemEntity::class,
         DebtPaymentEntity::class,
         ExpenseEntity::class,
+        SalesReturnEntity::class,
     ],
     version = DatabaseConfig.DATABASE_VERSION,
     exportSchema = false,
@@ -39,6 +42,8 @@ abstract class KasirDatabase : RoomDatabase() {
     abstract fun reportDao(): ReportDao
 
     abstract fun salesTransactionDao(): SalesTransactionDao
+
+    abstract fun salesReturnDao(): SalesReturnDao
 
     abstract fun debtPaymentDao(): DebtPaymentDao
 
@@ -65,6 +70,7 @@ abstract class KasirDatabase : RoomDatabase() {
                         MIGRATION_7_8,
                         MIGRATION_8_9,
                         MIGRATION_9_10,
+                        MIGRATION_10_11,
                     )
                     .build()
                     .also { instance = it }
@@ -269,6 +275,53 @@ abstract class KasirDatabase : RoomDatabase() {
                     """
                     CREATE INDEX IF NOT EXISTS `index_expenses_created_at_millis`
                     ON `expenses` (`created_at_millis`)
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sales_returns` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `transaction_id` INTEGER NOT NULL,
+                        `transaction_item_id` INTEGER NOT NULL,
+                        `product_id` INTEGER NOT NULL,
+                        `product_name` TEXT NOT NULL,
+                        `quantity` INTEGER NOT NULL,
+                        `refund_amount` INTEGER NOT NULL,
+                        `created_at_millis` INTEGER NOT NULL,
+                        FOREIGN KEY(`transaction_id`) REFERENCES `sales_transactions`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(`transaction_item_id`) REFERENCES `sales_transaction_items`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_sales_returns_transaction_id`
+                    ON `sales_returns` (`transaction_id`)
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_sales_returns_transaction_item_id`
+                    ON `sales_returns` (`transaction_item_id`)
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_sales_returns_product_id`
+                    ON `sales_returns` (`product_id`)
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_sales_returns_created_at_millis`
+                    ON `sales_returns` (`created_at_millis`)
                     """.trimIndent(),
                 )
             }

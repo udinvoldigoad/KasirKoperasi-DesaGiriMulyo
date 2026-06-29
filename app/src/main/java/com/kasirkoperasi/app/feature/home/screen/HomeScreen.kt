@@ -1,11 +1,14 @@
 package com.kasirkoperasi.app.feature.home.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,11 +29,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.History
@@ -39,6 +44,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -55,6 +62,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -74,20 +82,33 @@ import com.kasirkoperasi.app.core.ui.KoperasiLogo
 import com.kasirkoperasi.app.core.ui.ModalOverlayWindow
 import com.kasirkoperasi.app.domain.model.Product
 import com.kasirkoperasi.app.domain.model.ReportSummary
+import com.kasirkoperasi.app.domain.model.SalesTransaction
+import com.kasirkoperasi.app.domain.model.SalesTransactionItem
+import com.kasirkoperasi.app.feature.home.state.HomeReturnUiState
 import com.kasirkoperasi.app.feature.product.state.ProductUiState
 import com.kasirkoperasi.app.ui.theme.CreamBackground
 import com.kasirkoperasi.app.ui.theme.DeepGreen
 import com.kasirkoperasi.app.ui.theme.LineSoft
 import com.kasirkoperasi.app.ui.theme.MutedText
 import com.kasirkoperasi.app.ui.theme.SoftGray
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
     uiState: ProductUiState,
     reportSummary: ReportSummary,
+    returnUiState: HomeReturnUiState = HomeReturnUiState(),
     selectedRoute: String,
     onRouteSelected: (String) -> Unit,
     onScanBarcode: () -> Unit = {},
+    onOpenReturnSheet: () -> Unit = {},
+    onReturnTransactionSelected: (SalesTransaction) -> Unit = {},
+    onReturnTransactionListRequested: () -> Unit = {},
+    onReturnItemSelected: (SalesTransactionItem) -> Unit = {},
+    onProcessReturn: () -> Unit = {},
+    onReturnSheetDismissed: () -> Unit = {},
     storeName: String = "KasirKoperasi",
     storeLogoUri: String? = null,
     modifier: Modifier = Modifier,
@@ -109,10 +130,19 @@ fun HomeScreen(
     val lowStock = lowStockProducts.size
     var showLowStockSheet by rememberSaveable { mutableStateOf(false) }
     var showInfoSheet by rememberSaveable { mutableStateOf(false) }
+    var showReturnSheet by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = showLowStockSheet || showInfoSheet) {
+    BackHandler(enabled = showLowStockSheet || showInfoSheet || showReturnSheet) {
         when {
             showInfoSheet -> showInfoSheet = false
+            showReturnSheet -> {
+                if (returnUiState.selectedTransaction != null) {
+                    onReturnTransactionListRequested()
+                } else {
+                    showReturnSheet = false
+                    onReturnSheetDismissed()
+                }
+            }
             showLowStockSheet -> showLowStockSheet = false
         }
     }
@@ -188,6 +218,15 @@ fun HomeScreen(
                     onClick = { onRouteSelected(AppRoute.Transaction.route) },
                 )
             }
+
+            item {
+                ReturnProductButton(
+                    onClick = {
+                        showReturnSheet = true
+                        onOpenReturnSheet()
+                    },
+                )
+            }
         }
     }
 
@@ -201,6 +240,20 @@ fun HomeScreen(
     if (showInfoSheet) {
         HomeInfoSheet(
             onDismiss = { showInfoSheet = false },
+        )
+    }
+
+    if (showReturnSheet) {
+        ReturnProductSheet(
+            uiState = returnUiState,
+            onTransactionSelected = onReturnTransactionSelected,
+            onTransactionListRequested = onReturnTransactionListRequested,
+            onItemSelected = onReturnItemSelected,
+            onProcessReturn = onProcessReturn,
+            onDismiss = {
+                showReturnSheet = false
+                onReturnSheetDismissed()
+            },
         )
     }
 }
@@ -1084,6 +1137,807 @@ private fun NewTransactionButton(
 }
 
 @Composable
+private fun ReturnProductButton(
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.24f)),
+        shadowElevation = 1.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.History,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = DeepGreen,
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Retur Barang",
+                color = DeepGreen,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReturnProductSheet(
+    uiState: HomeReturnUiState,
+    onTransactionSelected: (SalesTransaction) -> Unit,
+    onTransactionListRequested: () -> Unit,
+    onItemSelected: (SalesTransactionItem) -> Unit,
+    onProcessReturn: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val successMessage = uiState.successMessage
+
+    ModalOverlayWindow(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.34f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .dismissPanelOnTap(onDismiss),
+            )
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.82f)
+                    .then(if (successMessage != null) Modifier.blur(5.dp) else Modifier)
+                    .clickable { },
+                color = CreamBackground,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                shadowElevation = 12.dp,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    HomePanelHandle(onDismiss = onDismiss)
+
+                    ReturnSheetHeader(
+                        showBackButton = uiState.selectedTransaction != null,
+                        onBack = onTransactionListRequested,
+                    )
+
+                    Text(
+                        text = if (uiState.selectedTransaction == null) {
+                            "Pilih riwayat transaksi 7 hari terakhir."
+                        } else {
+                            "Pilih barang yang akan diretur dari transaksi ini."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MutedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    uiState.errorMessage?.let { message ->
+                        ReturnMessageCard(message = message)
+                    }
+
+                    if (uiState.selectedTransaction == null) {
+                        ReturnTransactionList(
+                            uiState = uiState,
+                            onTransactionSelected = onTransactionSelected,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        ReturnItemList(
+                            uiState = uiState,
+                            onTransactionListRequested = onTransactionListRequested,
+                            onItemSelected = onItemSelected,
+                            onProcessReturn = onProcessReturn,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            successMessage?.let { message ->
+                ReturnSuccessDialog(
+                    message = message,
+                    item = uiState.selectedReturnItem,
+                    returnedQuantity = uiState.returnedQuantity,
+                    onDismiss = onDismiss,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnSheetHeader(
+    showBackButton: Boolean,
+    onBack: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (showBackButton) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(40.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onBack() },
+                shape = CircleShape,
+                color = Color.White,
+                border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.14f)),
+                shadowElevation = 1.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Kembali ke daftar transaksi",
+                        modifier = Modifier.size(22.dp),
+                        tint = DeepGreen,
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "Retur Barang",
+            color = DeepGreen,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun ReturnTransactionList(
+    uiState: HomeReturnUiState,
+    onTransactionSelected: (SalesTransaction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Pilih Riwayat Transaksi",
+            color = Color(0xFF17221B),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+
+        when {
+            uiState.isLoading -> {
+                ReturnMessageCard(message = "Memuat riwayat transaksi...")
+            }
+
+            uiState.transactions.isEmpty() -> {
+                ReturnMessageCard(message = "Belum ada transaksi dalam 7 hari terakhir.")
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                ) {
+                    items(
+                        items = uiState.transactions,
+                        key = { it.id },
+                    ) { transaction ->
+                        ReturnTransactionCard(
+                            transaction = transaction,
+                            onClick = { onTransactionSelected(transaction) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnTransactionCard(
+    transaction: SalesTransaction,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, LineSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(DeepGreen.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
+                    contentDescription = null,
+                    modifier = Modifier.size(25.dp),
+                    tint = DeepGreen,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = transaction.transactionNumber,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = transaction.buyerName.ifBlank { "Pembeli umum" },
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = transaction.createdAtMillis.toHomeDateTime(),
+                    color = MutedText,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = transaction.totalAmount.toRupiah(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "${transaction.itemCount} item",
+                    color = MutedText,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnItemList(
+    uiState: HomeReturnUiState,
+    onTransactionListRequested: () -> Unit,
+    onItemSelected: (SalesTransactionItem) -> Unit,
+    onProcessReturn: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        uiState.selectedTransaction?.let { transaction ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.16f)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = transaction.transactionNumber,
+                            color = Color(0xFF17221B),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${transaction.createdAtMillis.toHomeDateTime()} - ${transaction.totalAmount.toRupiah()}",
+                            color = MutedText,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = DeepGreen.copy(alpha = 0.10f),
+                        modifier = Modifier.clickable { onTransactionListRequested() },
+                    ) {
+                        Text(
+                            text = "Ganti",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            color = DeepGreen,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+
+        when {
+            uiState.isLoading -> {
+                ReturnMessageCard(message = "Memuat daftar barang...")
+            }
+
+            uiState.selectedItems.isEmpty() -> {
+                ReturnMessageCard(message = "Transaksi ini tidak memiliki item barang.")
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                ) {
+                    items(
+                        items = uiState.selectedItems,
+                        key = { it.id },
+                    ) { item ->
+                        ReturnItemCard(
+                            item = item,
+                            isSelected = uiState.selectedReturnItem?.id == item.id,
+                            onClick = { onItemSelected(item) },
+                        )
+                    }
+                }
+
+                uiState.selectedReturnItem?.let { selectedItem ->
+                    ReturnConfirmationCard(
+                        item = selectedItem,
+                        returnedQuantity = uiState.returnedQuantity,
+                        remainingQuantity = uiState.remainingReturnQuantity,
+                        isProcessing = uiState.isProcessingReturn,
+                        onProcessReturn = onProcessReturn,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnSuccessDialog(
+    message: String,
+    item: SalesTransactionItem?,
+    returnedQuantity: Int,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.38f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { },
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(DeepGreen.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(42.dp),
+                        tint = DeepGreen,
+                    )
+                }
+
+                Text(
+                    text = "Retur Berhasil",
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = message,
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+
+                item?.let {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFEAF3E8),
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.16f)),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Text(
+                                    text = it.productName,
+                                    color = Color(0xFF17221B),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "Stok sudah dikembalikan dan laporan dikoreksi",
+                                    color = MutedText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Text(
+                                text = "$returnedQuantity ${it.unit}",
+                                color = DeepGreen,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        text = "Selesai",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnConfirmationCard(
+    item: SalesTransactionItem,
+    returnedQuantity: Int,
+    remainingQuantity: Int,
+    isProcessing: Boolean,
+    onProcessReturn: () -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.22f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Konfirmasi Retur",
+                color = Color(0xFF17221B),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = item.productName,
+                color = DeepGreen,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "Terjual ${item.quantity} ${item.unit}, sudah retur $returnedQuantity ${item.unit}, sisa bisa retur $remainingQuantity ${item.unit}.",
+                color = MutedText,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFEAF3E8),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, DeepGreen.copy(alpha = 0.14f)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Barang yang akan dikembalikan",
+                            color = MutedText,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            text = "Mengikuti jumlah barang pada transaksi",
+                            color = MutedText,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        text = "$remainingQuantity ${item.unit}",
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Estimasi nilai retur",
+                        color = MutedText,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        text = (remainingQuantity.toLong() * item.sellingPrice).toRupiah(),
+                        color = DeepGreen,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                Button(
+                    onClick = onProcessReturn,
+                    enabled = remainingQuantity > 0 && !isProcessing,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepGreen,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Text(
+                        text = if (isProcessing) "Memproses..." else "Proses Retur",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnItemCard(
+    item: SalesTransactionItem,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) DeepGreen.copy(alpha = 0.45f) else LineSoft,
+        label = "returnItemBorder",
+    )
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFFF3F8F1) else Color.White,
+        label = "returnItemBackground",
+    )
+    val leadingBackgroundColor by animateColorAsState(
+        targetValue = if (isSelected) DeepGreen else SoftGray,
+        label = "returnItemLeadingBackground",
+    )
+    val leadingTextColor by animateColorAsState(
+        targetValue = if (isSelected) Color.White else DeepGreen,
+        label = "returnItemLeadingText",
+    )
+    val cardElevation by animateDpAsState(
+        targetValue = if (isSelected) 4.dp else 1.dp,
+        label = "returnItemElevation",
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(1.dp, borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(13.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(leadingBackgroundColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = item.productName.firstOrNull()?.uppercaseChar()?.toString().orEmpty(),
+                    color = leadingTextColor,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = item.productName,
+                    color = Color(0xFF17221B),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${item.quantity} ${item.unit} - ${item.sellingPrice.toRupiah()}",
+                    color = MutedText,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                )
+                Text(
+                    text = if (isSelected) "Barang dipilih untuk retur" else "Tap untuk pilih barang retur",
+                    color = if (isSelected) DeepGreen else MutedText,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = item.subtotal.toRupiah(),
+                    color = DeepGreen,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+                if (isSelected) {
+                    Surface(
+                        shape = CircleShape,
+                        color = DeepGreen,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .size(18.dp),
+                            tint = Color.White,
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MutedText.copy(alpha = 0.55f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReturnMessageCard(
+    message: String,
+    isSuccess: Boolean = false,
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSuccess) DeepGreen.copy(alpha = 0.10f) else Color.White,
+        ),
+        border = BorderStroke(1.dp, if (isSuccess) DeepGreen.copy(alpha = 0.22f) else LineSoft),
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            color = if (isSuccess) DeepGreen else MutedText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isSuccess) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
 fun ComingSoonScreen(
     title: String,
     selectedRoute: String,
@@ -1182,6 +2036,10 @@ private fun Long.toRupiah(): String {
         .reversed()
 
     return "Rp$grouped"
+}
+
+private fun Long.toHomeDateTime(): String {
+    return SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.forLanguageTag("id-ID")).format(Date(this))
 }
 
 private fun calculateProfitPercentage(

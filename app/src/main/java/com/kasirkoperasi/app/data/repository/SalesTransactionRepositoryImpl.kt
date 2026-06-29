@@ -2,13 +2,17 @@ package com.kasirkoperasi.app.data.repository
 
 import androidx.room.withTransaction
 import com.kasirkoperasi.app.data.local.dao.ProductDao
+import com.kasirkoperasi.app.data.local.dao.SalesReturnDao
 import com.kasirkoperasi.app.data.local.dao.SalesTransactionDao
 import com.kasirkoperasi.app.data.local.dao.StockDao
 import com.kasirkoperasi.app.data.local.database.KasirDatabase
+import com.kasirkoperasi.app.data.local.entity.SalesReturnEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionEntity
 import com.kasirkoperasi.app.data.local.entity.SalesTransactionItemEntity
 import com.kasirkoperasi.app.data.local.entity.StockMovementEntity
 import com.kasirkoperasi.app.data.mapper.toDomain
+import com.kasirkoperasi.app.domain.model.SalesReturn
+import com.kasirkoperasi.app.domain.model.SalesReturnSummary
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionDraftItem
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
@@ -18,6 +22,7 @@ import com.kasirkoperasi.app.domain.repository.SalesTransactionRepository
 
 class SalesTransactionRepositoryImpl(
     private val salesTransactionDao: SalesTransactionDao,
+    private val salesReturnDao: SalesReturnDao,
     private val productDao: ProductDao,
     private val stockDao: StockDao,
     private val database: KasirDatabase,
@@ -193,6 +198,87 @@ class SalesTransactionRepositoryImpl(
         require(transactionId > 0L) { "Transaksi tidak valid" }
 
         return salesTransactionDao.getItems(transactionId).map { it.toDomain() }
+    }
+
+    override suspend fun getReturnedQuantity(transactionItemId: Long): Int {
+        require(transactionItemId > 0L) { "Item transaksi tidak valid" }
+
+        return salesReturnDao.getReturnedQuantity(transactionItemId)
+    }
+
+    override suspend fun getReturnSummaries(
+        transactionItemIds: List<Long>,
+    ): Map<Long, SalesReturnSummary> {
+        val validIds = transactionItemIds.filter { it > 0L }.distinct()
+        if (validIds.isEmpty()) return emptyMap()
+
+        return salesReturnDao.getReturnSummariesByItemIds(validIds)
+            .map { it.toDomain() }
+            .associateBy { it.transactionItemId }
+    }
+
+    override suspend fun getReturnsBetween(
+        startDateMillis: Long,
+        endDateMillis: Long,
+        limit: Int,
+    ): List<SalesReturn> {
+        return salesReturnDao.getReturnsBetween(
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+            limit = limit,
+        ).map { it.toDomain() }
+    }
+
+    override suspend fun returnTransactionItem(
+        transaction: SalesTransaction,
+        item: SalesTransactionItem,
+        quantity: Int,
+    ): Long {
+        require(transaction.id > 0L) { "Transaksi tidak valid" }
+        require(item.id > 0L) { "Item transaksi tidak valid" }
+        require(item.transactionId == transaction.id) { "Item tidak sesuai dengan transaksi" }
+        require(quantity > 0) { "Jumlah retur wajib lebih dari 0" }
+
+        return database.withTransaction {
+            val returnedQuantity = salesReturnDao.getReturnedQuantity(item.id)
+            val remainingQuantity = item.quantity - returnedQuantity
+            if (quantity > remainingQuantity) {
+                error("Jumlah retur melebihi sisa barang yang bisa diretur")
+            }
+
+            val product = productDao.getProductById(item.productId)
+                ?: error("Barang tidak ditemukan atau sudah nonaktif")
+            val createdAtMillis = System.currentTimeMillis()
+            val updatedStock = product.stockQuantity + quantity
+
+            productDao.updateStockQuantity(
+                productId = product.id,
+                stockQuantity = updatedStock,
+                updatedAtMillis = createdAtMillis,
+            )
+            stockDao.insertStockMovement(
+                StockMovementEntity(
+                    productId = item.productId,
+                    type = StockMovementType.IN.name,
+                    quantity = quantity,
+                    currentStock = updatedStock,
+                    note = "Retur ${transaction.transactionNumber}",
+                    createdAtMillis = createdAtMillis,
+                ),
+            )
+
+            salesReturnDao.insertReturn(
+                SalesReturnEntity(
+                    transactionId = transaction.id,
+                    transactionItemId = item.id,
+                    productId = item.productId,
+                    productName = item.productName,
+                    quantity = quantity,
+                    refundAmount = item.sellingPrice * quantity,
+                    createdAtMillis = createdAtMillis,
+                ),
+            )
+        }
     }
 
     private companion object {

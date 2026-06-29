@@ -13,10 +13,13 @@ import com.kasirkoperasi.app.domain.model.DebtCustomerSummary
 import com.kasirkoperasi.app.domain.model.DebtPayment
 import com.kasirkoperasi.app.domain.model.Expense
 import com.kasirkoperasi.app.domain.model.Product
+import com.kasirkoperasi.app.domain.model.SalesReturn
+import com.kasirkoperasi.app.domain.model.SalesReturnSummary
 import com.kasirkoperasi.app.domain.model.SalesTransaction
 import com.kasirkoperasi.app.domain.model.SalesTransactionItem
 import com.kasirkoperasi.app.domain.model.StockMovement
 import com.kasirkoperasi.app.domain.model.StockMovementType
+import com.kasirkoperasi.app.domain.service.ReportAccountingCalculator
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -27,6 +30,8 @@ data class TransactionReportPdfData(
     val periodLabel: String,
     val transactions: List<SalesTransaction>,
     val itemsByTransactionId: Map<Long, List<SalesTransactionItem>>,
+    val returnSummariesByItemId: Map<Long, SalesReturnSummary>,
+    val returns: List<SalesReturn>,
     val stockProducts: List<Product>,
     val productNamesById: Map<Long, String>,
     val debtPayments: List<DebtPayment>,
@@ -42,6 +47,7 @@ class TransactionReportPdfExporter(
     fun export(data: TransactionReportPdfData): Uri {
         require(
             data.transactions.isNotEmpty() ||
+            data.returns.isNotEmpty() ||
             data.stockProducts.isNotEmpty() ||
                 data.debtPayments.isNotEmpty() ||
                 data.stockMovements.isNotEmpty() ||
@@ -129,7 +135,8 @@ private class PdfRenderer(
         drawReportHeader(data)
         drawSummary(data)
         drawTransactionSection(data)
-        drawDebtTransactionSection(data.transactions.filter { it.debtAmount > 0L })
+        drawReturnSection(data.returns)
+        drawDebtTransactionSection(data)
         drawDebtPaymentSection(data.debtPayments)
         drawDebtCustomerSection(data.debtCustomers)
         drawExpenseSection(data.expenses)
@@ -169,65 +176,54 @@ private class PdfRenderer(
     }
 
     private fun drawSummary(data: TransactionReportPdfData) {
-        val totalSales = data.transactions.sumOf { it.totalAmount }
-        val totalProfit = data.transactions.sumOf { it.totalProfit }
-        val totalItems = data.transactions.sumOf { it.itemCount }
-        val totalCash = data.transactions.sumOf { transaction ->
-            if (transaction.paidPaymentMethod.equals("Cash", ignoreCase = true)) {
-                    transaction.paidAmount - transaction.changeAmount
-            } else {
-                0L
-            }
-        } + data.debtPayments
-            .filter { it.paymentMethod.equals("Cash", ignoreCase = true) }
-            .sumOf { it.amount }
-        val totalQris = data.transactions
-            .filter { it.paidPaymentMethod.equals("QRIS", ignoreCase = true) }
-            .sumOf { it.paidAmount } + data.debtPayments
-            .filter { it.paymentMethod.equals("QRIS", ignoreCase = true) }
-            .sumOf { it.amount }
-        val totalDebt = data.transactions.sumOf { it.debtAmount }
+        val summary = ReportAccountingCalculator.calculateSummary(
+            transactions = data.transactions,
+            returns = data.returns,
+            debtPayments = data.debtPayments,
+            lowStockItemCount = data.stockProducts.count { it.stockQuantity <= LOW_STOCK_LIMIT },
+        )
+        val totalReturn = data.returns.sumOf { it.refundAmount }
         val totalDebtPayment = data.debtPayments.sumOf { it.amount }
         val totalExpense = data.expenses.sumOf { it.amount }
-        val netProfit = totalProfit - totalExpense
+        val netProfit = summary.totalProfit - totalExpense
 
         drawSummaryBox(
             x = MARGIN_LEFT,
             width = SUMMARY_BOX_WIDTH,
             title = "Total Penjualan",
-            value = totalSales.toRupiah(),
+            value = summary.totalSales.toRupiah(),
         )
         drawSummaryBox(
             x = MARGIN_LEFT + SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP,
             width = SUMMARY_BOX_WIDTH,
             title = "Total Profit",
-            value = totalProfit.toRupiah(),
+            value = summary.totalProfit.toRupiah(),
         )
         drawSummaryBox(
             x = MARGIN_LEFT + ((SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP) * 2),
             width = SUMMARY_BOX_WIDTH,
             title = "Item Terjual",
-            value = totalItems.toString(),
+            value = summary.soldItemCount.toString(),
         )
         drawSummaryBox(
             x = MARGIN_LEFT,
             width = SUMMARY_BOX_WIDTH,
             title = "Total Cash",
-            value = totalCash.toRupiah(),
+            value = summary.totalCash.toRupiah(),
             yOffset = 50f,
         )
         drawSummaryBox(
             x = MARGIN_LEFT + SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP,
             width = SUMMARY_BOX_WIDTH,
             title = "Total QRIS",
-            value = totalQris.toRupiah(),
+            value = summary.totalQris.toRupiah(),
             yOffset = 50f,
         )
         drawSummaryBox(
             x = MARGIN_LEFT + ((SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP) * 2),
             width = SUMMARY_BOX_WIDTH,
             title = "Hutang / Pelunasan",
-            value = "${totalDebt.toRupiah()} / ${totalDebtPayment.toRupiah()}",
+            value = "${summary.totalDebt.toRupiah()} / ${totalDebtPayment.toRupiah()}",
             yOffset = 50f,
         )
         drawSummaryBox(
@@ -242,6 +238,13 @@ private class PdfRenderer(
             width = SUMMARY_BOX_WIDTH,
             title = "Profit Bersih",
             value = netProfit.toRupiah(),
+            yOffset = 100f,
+        )
+        drawSummaryBox(
+            x = MARGIN_LEFT + ((SUMMARY_BOX_WIDTH + SUMMARY_BOX_GAP) * 2),
+            width = SUMMARY_BOX_WIDTH,
+            title = "Total Retur",
+            value = totalReturn.toRupiah(),
             yOffset = 100f,
         )
         y += 154f
@@ -279,6 +282,7 @@ private class PdfRenderer(
                     rowNumber = rowNumber,
                     transaction = transaction,
                     item = null,
+                    returnSummary = null,
                 )
                 rowNumber += 1
             } else {
@@ -287,10 +291,31 @@ private class PdfRenderer(
                         rowNumber = rowNumber,
                         transaction = transaction,
                         item = item,
+                        returnSummary = data.returnSummariesByItemId[item.id],
                     )
                     rowNumber += 1
                 }
             }
+        }
+
+        y += 18f
+    }
+
+    private fun drawReturnSection(returns: List<SalesReturn>) {
+        drawSectionTitle("Daftar Retur Barang")
+        drawReturnTableHeader()
+
+        if (returns.isEmpty()) {
+            drawEmptyTableMessage("Belum ada retur barang pada periode ini.")
+            y += 10f
+            return
+        }
+
+        returns.forEachIndexed { index, salesReturn ->
+            drawReturnRow(
+                rowNumber = index + 1,
+                salesReturn = salesReturn,
+            )
         }
 
         y += 18f
@@ -313,20 +338,26 @@ private class PdfRenderer(
         }
     }
 
-    private fun drawDebtTransactionSection(transactions: List<SalesTransaction>) {
+    private fun drawDebtTransactionSection(data: TransactionReportPdfData) {
         drawSectionTitle("Daftar Transaksi Hutang")
         drawDebtTransactionTableHeader()
 
+        val transactions = data.transactions.filter { it.debtAmount > 0L }
         if (transactions.isEmpty()) {
             drawEmptyTableMessage("Belum ada transaksi hutang pada periode ini.")
             y += 10f
             return
         }
 
+        val returnedAmountByTransactionId = data.itemsByTransactionId.mapValues { (_, items) ->
+            items.sumOf { item -> data.returnSummariesByItemId[item.id]?.refundAmount ?: 0L }
+        }
+
         transactions.forEachIndexed { index, transaction ->
             drawDebtTransactionRow(
                 rowNumber = index + 1,
                 transaction = transaction,
+                returnedAmount = returnedAmountByTransactionId[transaction.id] ?: 0L,
             )
         }
 
@@ -483,6 +514,10 @@ private class PdfRenderer(
         drawHeaderRow(EXPENSE_TABLE_COLUMNS)
     }
 
+    private fun drawReturnTableHeader() {
+        drawHeaderRow(RETURN_TABLE_COLUMNS)
+    }
+
     private fun drawHeaderRow(columns: List<TableColumn>) {
         ensureSpace(TABLE_HEADER_HEIGHT + ROW_HEIGHT)
 
@@ -507,6 +542,7 @@ private class PdfRenderer(
         rowNumber: Int,
         transaction: SalesTransaction,
         item: SalesTransactionItem?,
+        returnSummary: SalesReturnSummary?,
     ) {
         ensureSpace(ROW_HEIGHT) {
             drawTransactionTableHeader()
@@ -518,6 +554,22 @@ private class PdfRenderer(
             canvas.drawRect(MARGIN_LEFT, top, PAGE_WIDTH - MARGIN_RIGHT, top + ROW_HEIGHT, fillPaint)
         }
 
+        val returnedQuantity = returnSummary?.quantity ?: 0
+        val returnedAmount = returnSummary?.refundAmount ?: 0L
+        val itemQuantity = item?.quantity ?: 0
+        val netQuantity = (itemQuantity - returnedQuantity).coerceAtLeast(0)
+        val netSubtotal = item?.let { (it.subtotal - returnedAmount).coerceAtLeast(0L) }
+        val productName = item?.let {
+            if (returnedQuantity > 0) "${it.productName} (Diretur)" else it.productName
+        } ?: "-"
+        val quantityLabel = item?.let {
+            if (returnedQuantity > 0) {
+                "$netQuantity ${it.unit} (retur $returnedQuantity)"
+            } else {
+                "${it.quantity} ${it.unit}"
+            }
+        } ?: "-"
+
         val values = listOf(
             rowNumber.toString(),
             transaction.createdAtMillis.toShortDateTime(),
@@ -526,10 +578,10 @@ private class PdfRenderer(
                 buyerContact = transaction.buyerContact,
                 fallback = "Pembeli Umum",
             ),
-            item?.productName ?: "-",
-            item?.let { "${it.quantity} ${it.unit}" } ?: "-",
+            productName,
+            quantityLabel,
             item?.sellingPrice?.toRupiah() ?: "-",
-            item?.subtotal?.toRupiah() ?: transaction.totalAmount.toRupiah(),
+            netSubtotal?.toRupiah() ?: transaction.totalAmount.toRupiah(),
             transaction.toPaymentLabel(),
         )
 
@@ -553,6 +605,38 @@ private class PdfRenderer(
             height = ROW_HEIGHT,
         )
         y += ROW_HEIGHT
+    }
+
+    private fun drawReturnRow(
+        rowNumber: Int,
+        salesReturn: SalesReturn,
+    ) {
+        ensureSpace(ROW_HEIGHT) {
+            drawReturnTableHeader()
+        }
+
+        val values = listOf(
+            rowNumber.toString(),
+            salesReturn.createdAtMillis.toShortDateTime(),
+            salesReturn.transactionNumber,
+            buyerLabel(
+                buyerName = salesReturn.buyerName,
+                buyerContact = salesReturn.buyerContact,
+                fallback = "Pembeli Umum",
+            ),
+            salesReturn.productName,
+            "${salesReturn.quantity} ${salesReturn.unit}",
+            salesReturn.refundAmount.toRupiah(),
+            "Stok masuk, transaksi dikoreksi",
+        )
+
+        drawGenericRow(
+            rowNumber = rowNumber,
+            values = values,
+            columns = RETURN_TABLE_COLUMNS,
+            boldIndexes = setOf(5, 6),
+            multilineIndexes = setOf(3, 4, 7),
+        )
     }
 
     private fun drawStockRow(
@@ -604,9 +688,19 @@ private class PdfRenderer(
     private fun drawDebtTransactionRow(
         rowNumber: Int,
         transaction: SalesTransaction,
+        returnedAmount: Long,
     ) {
         ensureSpace(ROW_HEIGHT) {
             drawDebtTransactionTableHeader()
+        }
+
+        val netTotalAmount = (transaction.totalAmount - returnedAmount).coerceAtLeast(0L)
+        val netDebtAmount = (transaction.debtAmount - returnedAmount.coerceAtMost(transaction.debtAmount))
+            .coerceAtLeast(0L)
+        val transactionLabel = if (returnedAmount > 0L) {
+            "${transaction.transactionNumber} (Retur)"
+        } else {
+            transaction.transactionNumber
         }
 
         val values = listOf(
@@ -617,10 +711,10 @@ private class PdfRenderer(
                 buyerContact = transaction.buyerContact,
                 fallback = "Tanpa Nama",
             ),
-            transaction.transactionNumber,
-            transaction.totalAmount.toRupiah(),
+            transactionLabel,
+            netTotalAmount.toRupiah(),
             transaction.paidAmount.toRupiah(),
-            transaction.debtAmount.toRupiah(),
+            netDebtAmount.toRupiah(),
         )
 
         drawGenericRow(
@@ -861,6 +955,7 @@ private class PdfRenderer(
         const val ROW_HEIGHT = 40f
         const val SUMMARY_BOX_WIDTH = 254f
         const val SUMMARY_BOX_GAP = 12f
+        const val LOW_STOCK_LIMIT = 5
 
         val TRANSACTION_TABLE_COLUMNS = listOf(
             TableColumn("No", 32f),
@@ -882,6 +977,17 @@ private class PdfRenderer(
             TableColumn("Satuan", 60f),
             TableColumn("Harga Beli", 106f),
             TableColumn("Harga Jual", 106f),
+        )
+
+        val RETURN_TABLE_COLUMNS = listOf(
+            TableColumn("No", 32f),
+            TableColumn("Tanggal", 92f),
+            TableColumn("Transaksi", 100f),
+            TableColumn("Pembeli", 120f),
+            TableColumn("Barang", 206f),
+            TableColumn("Qty Retur", 76f),
+            TableColumn("Nilai Retur", 92f),
+            TableColumn("Keterangan", 68f),
         )
 
         val DEBT_TRANSACTION_TABLE_COLUMNS = listOf(

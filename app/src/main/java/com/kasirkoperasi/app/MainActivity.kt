@@ -31,6 +31,8 @@ import com.kasirkoperasi.app.feature.expense.screen.ExpenseScreen
 import com.kasirkoperasi.app.feature.expense.viewmodel.ExpenseViewModel
 import com.kasirkoperasi.app.feature.expense.viewmodel.ExpenseViewModelFactory
 import com.kasirkoperasi.app.feature.home.screen.HomeScreen
+import com.kasirkoperasi.app.feature.home.viewmodel.HomeReturnViewModel
+import com.kasirkoperasi.app.feature.home.viewmodel.HomeReturnViewModelFactory
 import com.kasirkoperasi.app.feature.product.screen.ProductScreen
 import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModel
 import com.kasirkoperasi.app.feature.product.viewmodel.ProductViewModelFactory
@@ -93,6 +95,15 @@ class MainActivity : ComponentActivity() {
         TransactionHistoryViewModelFactory(
             getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
             getSalesTransactionItemsUseCase = appContainer.getSalesTransactionItemsUseCase,
+        )
+    }
+
+    private val homeReturnViewModel: HomeReturnViewModel by viewModels {
+        HomeReturnViewModelFactory(
+            getSalesTransactionsUseCase = appContainer.getSalesTransactionsUseCase,
+            getSalesTransactionItemsUseCase = appContainer.getSalesTransactionItemsUseCase,
+            getReturnedQuantityUseCase = appContainer.getReturnedQuantityUseCase,
+            returnSalesTransactionItemUseCase = appContainer.returnSalesTransactionItemUseCase,
         )
     }
 
@@ -230,13 +241,26 @@ class MainActivity : ComponentActivity() {
                 when (selectedRoute) {
                     AppRoute.Home.route -> {
                         val reportUiState by reportViewModel.uiState.collectAsState()
+                        val homeReturnUiState by homeReturnViewModel.uiState.collectAsState()
 
                         HomeScreen(
                             uiState = productUiState,
                             reportSummary = reportUiState.summary,
+                            returnUiState = homeReturnUiState,
                             selectedRoute = selectedRoute,
                             onRouteSelected = navigateTo,
                             onScanBarcode = startHomeBarcodeScan,
+                            onOpenReturnSheet = homeReturnViewModel::loadRecentTransactions,
+                            onReturnTransactionSelected = homeReturnViewModel::selectTransaction,
+                            onReturnTransactionListRequested = homeReturnViewModel::backToTransactionList,
+                            onReturnItemSelected = homeReturnViewModel::selectReturnItem,
+                            onProcessReturn = {
+                                homeReturnViewModel.processSelectedReturn {
+                                    productViewModel.loadProducts()
+                                    reportViewModel.loadTodaySummary()
+                                }
+                            },
+                            onReturnSheetDismissed = homeReturnViewModel::clearSelection,
                             storeName = settingsUiState.storeName,
                             storeLogoUri = settingsUiState.logoUri,
                             modifier = Modifier.fillMaxSize(),
